@@ -79,3 +79,8 @@ wx forecast "Key West" --focus marine --trust-tools
 # Review alerts without AI triage
 wx alerts "Seattle"
 ```
+
+## License
+
+This project is distributed under a proprietary, all-rights-reserved license.
+Contact the maintainers for commercial or redistribution permissions.

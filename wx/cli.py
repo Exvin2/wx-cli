@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Optional, Sequence
+
+import sys
 
 import typer
 from rich.console import Console
@@ -10,6 +12,10 @@ from rich.console import Console
 from .config import PersonaLiteral, StyleLiteral, load_settings
 from .orchestrator import Orchestrator
 from .render import render_result
+
+COMMAND_NAMES = {"forecast", "risk", "explain", "alerts"}
+_OPTIONS_WITH_VALUES = {"--style", "--persona"}
+
 
 app = typer.Typer(add_completion=False, no_args_is_help=False)
 console = Console()
@@ -111,8 +117,44 @@ def alerts(
     render_result(result, console=console, json_mode=json_mode, debug=debug, verbose=verbose)
 
 
-def main() -> None:
-    app()
+def _normalize_invocation(args: Sequence[str]) -> list[str]:
+    """Insert a placeholder question when the first positional is a subcommand."""
+
+    tokens = list(args)
+    idx = 0
+    forced_question = False
+
+    while idx < len(tokens):
+        token = tokens[idx]
+        if token == "--":
+            forced_question = True
+            idx += 1
+            break
+        if token.startswith("-"):
+            if token in _OPTIONS_WITH_VALUES and idx + 1 < len(tokens):
+                idx += 2
+            else:
+                idx += 1
+            continue
+        break
+
+    if idx >= len(tokens):
+        return tokens
+
+    if forced_question:
+        return tokens
+
+    candidate = tokens[idx]
+    if candidate in COMMAND_NAMES and (idx == 0 or tokens[idx - 1] != ""):
+        return tokens[:idx] + [""] + tokens[idx:]
+
+    return tokens
+
+
+def main(argv: Sequence[str] | None = None) -> None:
+    args = list(sys.argv[1:] if argv is None else argv)
+    normalized = _normalize_invocation(args)
+    app(args=normalized)
 
 
 if __name__ == "__main__":  # pragma: no cover
