@@ -10,11 +10,12 @@ import typer
 from rich.console import Console
 from rich.panel import Panel
 
+from .chat import start_chat_session
 from .config import PersonaLiteral, StyleLiteral, load_settings
 from .orchestrator import Orchestrator
 from .render import render_result, render_worldview
 
-COMMAND_NAMES = {"forecast", "risk", "explain", "alerts"}
+COMMAND_NAMES = {"forecast", "risk", "explain", "alerts", "chat"}
 _OPTIONS_WITH_VALUES = {"--style", "--persona"}
 
 
@@ -160,6 +161,18 @@ def alerts(
     debug: bool = ctx.obj["debug"]
     result = orchestrator.handle_alerts(place, ai=ai, stream=stream, verbose=verbose)
     render_result(result, console=console, json_mode=json_mode, debug=debug, verbose=verbose)
+
+
+@app.command()
+def chat(
+    ctx: typer.Context,
+    verbose: bool = typer.Option(False, "--verbose", help="Allow responses beyond 400 words."),  # noqa: B008
+):
+    """Start an interactive conversational AI weather bot session."""
+    settings = ctx.obj["settings"]
+    orchestrator: Orchestrator = ctx.obj["orchestrator"]
+    json_mode: bool = ctx.obj["json"]
+    start_chat_session(settings, orchestrator, console, verbose=verbose, json_mode=json_mode)
 
 
 def _normalize_invocation(args: Sequence[str]) -> list[str]:

@@ -185,7 +185,33 @@ class Settings:
             "timestamp": payload.get("timestamp"),
         }
         try:
-            self.state_file.write_text(json.dumps(minimal_payload, ensure_ascii=True, indent=2))
+            # Ensure state directory exists
+            self.state_file.parent.mkdir(parents=True, exist_ok=True)
+
+            # Write with restricted permissions (user read/write only)
+            import os
+            import tempfile
+
+            # Write to temp file first, then move (atomic operation)
+            fd, temp_path = tempfile.mkstemp(
+                dir=self.state_file.parent, prefix=".wx_temp_", suffix=".json"
+            )
+            try:
+                with os.fdopen(fd, "w") as f:
+                    f.write(json.dumps(minimal_payload, ensure_ascii=True, indent=2))
+
+                # Set restrictive permissions (0o600 = rw-------)
+                os.chmod(temp_path, 0o600)
+
+                # Atomic move
+                os.replace(temp_path, self.state_file)
+            except Exception:  # noqa: BLE001
+                # Clean up temp file if something went wrong
+                try:
+                    os.unlink(temp_path)
+                except OSError:
+                    pass
+                raise
         except OSError:
             # Failing to save state should never crash the CLI.
             pass
@@ -235,6 +261,10 @@ def load_settings(
     """Load runtime settings from the environment."""
 
     openrouter_key = os.getenv("OPENROUTER_API_KEY")
+    # Validate OpenRouter API key if provided
+    if openrouter_key:
+        _validate_api_key(openrouter_key, "OPENROUTER_API_KEY")
+
     openrouter_base_url = os.getenv("OPENROUTER_BASE_URL", DEFAULT_OPENROUTER_BASE_URL)
     models_env = os.getenv("OPENROUTER_MODELS")
     single_model = os.getenv("OPENROUTER_MODEL")
@@ -259,6 +289,10 @@ def load_settings(
     privacy_mode = _bool_from_env(os.getenv("PRIVACY_MODE"), True)
     offline_flag = _bool_from_env(os.getenv("WX_OFFLINE"), False)
     gemini_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+    # Validate Gemini API key if provided
+    if gemini_key:
+        _validate_api_key(gemini_key, "GEMINI_API_KEY")
+
     gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash-exp")
 
     state_root = Path(os.getenv("WX_STATE_DIR", str(STATE_DIR)))
@@ -290,6 +324,57 @@ def _parse_models(value: str | None) -> tuple[str, ...]:
         return ()
     parts = [part.strip() for part in value.split(",") if part.strip()]
     return tuple(parts)
+
+
+def _validate_api_key(key: str | None, key_name: str) -> bool:
+    """Validate API key format and provide warnings if needed."""
+    if not key:
+        return False
+
+    # Basic validation - check if it looks like a valid API key
+    key = key.strip()
+
+    # Check minimum length (most API keys are at least 20 characters)
+    if len(key) < 20:
+        import sys
+        print(
+            f"Warning: {key_name} appears to be too short (< 20 chars). "
+            f"This may not be a valid API key.",
+            file=sys.stderr,
+        )
+        return False
+
+    # Check for common placeholder values
+    placeholders = [
+        "your_api_key_here",
+        "placeholder",
+        "INSERT_KEY_HERE",
+        "xxx",
+        "test",
+        "example",
+        "sk-proj-",  # Common prefix for fake keys
+    ]
+    key_lower = key.lower()
+    if any(placeholder in key_lower for placeholder in placeholders):
+        import sys
+        print(
+            f"Warning: {key_name} appears to be a placeholder value. "
+            f"Please set a valid API key.",
+            file=sys.stderr,
+        )
+        return False
+
+    # Check for suspicious patterns (spaces, newlines, etc.)
+    if any(char in key for char in [" ", "\n", "\r", "\t"]):
+        import sys
+        print(
+            f"Warning: {key_name} contains whitespace characters. "
+            f"This is likely an error.",
+            file=sys.stderr,
+        )
+        return False
+
+    return True
 
 
 def get_openrouter_cfg() -> dict[str, str | None]:

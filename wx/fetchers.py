@@ -355,16 +355,323 @@ def fetch_eu_alerts(
     if offline:
         return []
 
-    # MeteoAlarm consolidated feed (simplified - actual implementation may vary)
+    import xml.etree.ElementTree as ET
+
+    # MeteoAlarm consolidated feed
     url = "https://meteoalarm.org/documents/rss/wflag-rss-all.xml"
 
     try:
         with _create_client(timeout) as client:
             response = client.get(url)
             response.raise_for_status()
-            # For now, return empty - full XML parsing would need xmltodict or ElementTree
-            # This is a placeholder that demonstrates the structure
-            # Future: parse XML and apply severe_only filter using _is_severe_weather()
-            return []
+            xml_content = response.text
     except (httpx.HTTPError, ValueError):
         return []
+
+    # Parse XML
+    try:
+        root = ET.fromstring(xml_content)
+    except ET.ParseError:
+        return []
+
+    alerts: list[Alert] = []
+
+    # Look for CAP alert elements (namespace might vary)
+    # Common namespaces for CAP feeds
+    namespaces = {
+        "cap": "urn:oasis:names:tc:emergency:cap:1.2",
+        "atom": "http://www.w3.org/2005/Atom",
+    }
+
+    # Try to parse as RSS first
+    for item in root.findall(".//item"):
+        try:
+            title = item.find("title")
+            description = item.find("description")
+            pubdate = item.find("pubDate")
+
+            if title is not None and title.text:
+                event_text = title.text.strip()
+
+                # Extract severity from description if available
+                severity = "Unknown"
+                if description is not None and description.text:
+                    desc_lower = description.text.lower()
+                    if "extreme" in desc_lower:
+                        severity = "Extreme"
+                    elif "severe" in desc_lower:
+                        severity = "Severe"
+                    elif "moderate" in desc_lower:
+                        severity = "Moderate"
+                    elif "minor" in desc_lower:
+                        severity = "Minor"
+
+                # Extract area from title (usually format: "AlertType - Area")
+                areas = []
+                if " - " in event_text:
+                    parts = event_text.split(" - ")
+                    if len(parts) > 1:
+                        areas = [parts[1].strip()]
+                    event_text = parts[0].strip()
+
+                # Filter for severe weather if requested
+                if severe_only and not _is_severe_weather(event_text):
+                    continue
+
+                alerts.append(
+                    Alert(
+                        event=event_text,
+                        severity=severity,
+                        areas=areas if areas else ["Europe"],
+                        expires_iso=pubdate.text if pubdate is not None else None,
+                    )
+                )
+        except (AttributeError, ValueError):
+            continue
+
+    # Try CAP format as fallback
+    if not alerts:
+        for alert_elem in root.findall(".//cap:alert", namespaces):
+            try:
+                info = alert_elem.find("cap:info", namespaces)
+                if info is None:
+                    continue
+
+                event_elem = info.find("cap:event", namespaces)
+                severity_elem = info.find("cap:severity", namespaces)
+                expires_elem = info.find("cap:expires", namespaces)
+
+                if event_elem is None or not event_elem.text:
+                    continue
+
+                event_text = event_elem.text.strip()
+
+                # Extract areas
+                areas = []
+                for area_elem in info.findall("cap:area", namespaces):
+                    area_desc = area_elem.find("cap:areaDesc", namespaces)
+                    if area_desc is not None and area_desc.text:
+                        areas.append(area_desc.text.strip())
+
+                # Filter for severe weather if requested
+                if severe_only and not _is_severe_weather(event_text):
+                    continue
+
+                alerts.append(
+                    Alert(
+                        event=event_text,
+                        severity=severity_elem.text if severity_elem is not None else "Unknown",
+                        areas=areas[:3] if areas else ["Europe"],
+                        expires_iso=expires_elem.text if expires_elem is not None else None,
+                    )
+                )
+            except (AttributeError, ValueError):
+                continue
+
+    return alerts
+
+
+def get_nws_forecast_grid(
+    lat: float, lon: float, *, offline: bool = False, timeout: float = DEFAULT_TIMEOUT
+) -> dict[str, Any] | None:
+    """Fetch NWS gridded forecast data for a location."""
+    if offline:
+        return None
+
+    # First, get the grid point metadata
+    points_url = f"https://api.weather.gov/points/{lat:.4f},{lon:.4f}"
+    try:
+        with _create_client(timeout) as client:
+            response = client.get(points_url)
+            response.raise_for_status()
+            points_data = response.json()
+    except (httpx.HTTPError, ValueError):
+        return None
+
+    # Extract forecast URL
+    properties = points_data.get("properties", {})
+    forecast_url = properties.get("forecast")
+    forecast_hourly_url = properties.get("forecastHourly")
+    grid_id = properties.get("gridId")
+    grid_x = properties.get("gridX")
+    grid_y = properties.get("gridY")
+
+    if not forecast_url:
+        return None
+
+    # Fetch the forecast
+    try:
+        with _create_client(timeout) as client:
+            forecast_response = client.get(forecast_url)
+            forecast_response.raise_for_status()
+            forecast_data = forecast_response.json()
+    except (httpx.HTTPError, ValueError):
+        return None
+
+    # Extract periods
+    periods = forecast_data.get("properties", {}).get("periods", [])
+
+    return {
+        "grid_id": grid_id,
+        "grid_x": grid_x,
+        "grid_y": grid_y,
+        "forecast_url": forecast_url,
+        "forecast_hourly_url": forecast_hourly_url,
+        "periods": periods[:7],  # Next 7 periods (roughly 3-4 days)
+        "updated": forecast_data.get("properties", {}).get("updated"),
+    }
+
+
+def get_nws_observation_stations(
+    lat: float, lon: float, *, offline: bool = False, timeout: float = DEFAULT_TIMEOUT
+) -> list[dict[str, Any]]:
+    """Fetch nearby NWS observation stations for a location."""
+    if offline:
+        return []
+
+    # Get stations near the point
+    url = f"https://api.weather.gov/points/{lat:.4f},{lon:.4f}/stations"
+    try:
+        with _create_client(timeout) as client:
+            response = client.get(url)
+            response.raise_for_status()
+            data = response.json()
+    except (httpx.HTTPError, ValueError):
+        return []
+
+    features = data.get("features", [])
+    stations = []
+
+    for feature in features[:5]:  # Limit to 5 nearest stations
+        props = feature.get("properties", {})
+        geometry = feature.get("geometry", {})
+        coords = geometry.get("coordinates", [])
+
+        stations.append(
+            {
+                "station_id": props.get("stationIdentifier"),
+                "name": props.get("name"),
+                "lat": coords[1] if len(coords) > 1 else None,
+                "lon": coords[0] if len(coords) > 0 else None,
+                "elevation": props.get("elevation", {}).get("value"),
+            }
+        )
+
+    return stations
+
+
+def get_nws_latest_observation(
+    station_id: str, *, offline: bool = False, timeout: float = DEFAULT_TIMEOUT
+) -> dict[str, Any] | None:
+    """Fetch the latest observation from a specific NWS station."""
+    if offline:
+        return None
+
+    url = f"https://api.weather.gov/stations/{station_id}/observations/latest"
+    try:
+        with _create_client(timeout) as client:
+            response = client.get(url)
+            response.raise_for_status()
+            data = response.json()
+    except (httpx.HTTPError, ValueError):
+        return None
+
+    props = data.get("properties", {})
+
+    return {
+        "station_id": station_id,
+        "timestamp": props.get("timestamp"),
+        "temp_c": _safe_float(props.get("temperature", {}).get("value")),
+        "dewpoint_c": _safe_float(props.get("dewpoint", {}).get("value")),
+        "wind_direction": _safe_float(props.get("windDirection", {}).get("value")),
+        "wind_speed_mps": _safe_float(props.get("windSpeed", {}).get("value")),
+        "wind_gust_mps": _safe_float(props.get("windGust", {}).get("value")),
+        "barometric_pressure_pa": _safe_float(props.get("barometricPressure", {}).get("value")),
+        "visibility_m": _safe_float(props.get("visibility", {}).get("value")),
+        "relative_humidity": _safe_float(props.get("relativeHumidity", {}).get("value")),
+        "heat_index_c": _safe_float(props.get("heatIndex", {}).get("value")),
+        "wind_chill_c": _safe_float(props.get("windChill", {}).get("value")),
+        "cloud_layers": props.get("cloudLayers", []),
+        "present_weather": props.get("presentWeather", []),
+    }
+
+
+def get_nws_hourly_forecast(
+    lat: float, lon: float, *, offline: bool = False, timeout: float = DEFAULT_TIMEOUT
+) -> list[dict[str, Any]]:
+    """Fetch NWS hourly forecast for a location."""
+    if offline:
+        return []
+
+    # Get the grid point first
+    points_url = f"https://api.weather.gov/points/{lat:.4f},{lon:.4f}"
+    try:
+        with _create_client(timeout) as client:
+            response = client.get(points_url)
+            response.raise_for_status()
+            points_data = response.json()
+    except (httpx.HTTPError, ValueError):
+        return []
+
+    forecast_hourly_url = points_data.get("properties", {}).get("forecastHourly")
+    if not forecast_hourly_url:
+        return []
+
+    # Fetch hourly forecast
+    try:
+        with _create_client(timeout) as client:
+            forecast_response = client.get(forecast_hourly_url)
+            forecast_response.raise_for_status()
+            forecast_data = forecast_response.json()
+    except (httpx.HTTPError, ValueError):
+        return []
+
+    periods = forecast_data.get("properties", {}).get("periods", [])
+    return periods[:24]  # Next 24 hours
+
+
+def get_comprehensive_nws_data(
+    lat: float, lon: float, *, offline: bool = False, timeout: float = DEFAULT_TIMEOUT
+) -> dict[str, Any]:
+    """Fetch comprehensive NWS data for a location (gridded forecast, stations, observations, alerts)."""
+    if offline:
+        return {
+            "forecast": None,
+            "hourly_forecast": [],
+            "stations": [],
+            "latest_observation": None,
+            "alerts": [],
+        }
+
+    result: dict[str, Any] = {
+        "forecast": None,
+        "hourly_forecast": [],
+        "stations": [],
+        "latest_observation": None,
+        "alerts": [],
+    }
+
+    # Fetch all data concurrently
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        future_forecast = executor.submit(get_nws_forecast_grid, lat, lon, offline=offline, timeout=timeout)
+        future_hourly = executor.submit(get_nws_hourly_forecast, lat, lon, offline=offline, timeout=timeout)
+        future_stations = executor.submit(get_nws_observation_stations, lat, lon, offline=offline, timeout=timeout)
+        future_alerts = executor.submit(get_quick_alerts, lat, lon, offline=offline, timeout=timeout)
+
+        # Collect results
+        result["forecast"] = future_forecast.result()
+        result["hourly_forecast"] = future_hourly.result()
+        result["stations"] = future_stations.result()
+        result["alerts"] = future_alerts.result()
+
+        # Get latest observation from nearest station if available
+        stations = result["stations"]
+        if stations and stations[0].get("station_id"):
+            station_id = stations[0]["station_id"]
+            result["latest_observation"] = get_nws_latest_observation(
+                station_id, offline=offline, timeout=timeout
+            )
+
+    return result

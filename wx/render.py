@@ -28,36 +28,48 @@ def render_result(
     word_limit = None if verbose else 400
     limiter = _WordLimiter(word_limit)
 
+    # Summary section
+    limiter.set_section_budget("summary")
     summary_panel = Panel(
         limiter.join_lines(response.sections.get("summary"), default="No summary provided."),
         title="Summary",
         expand=False,
     )
 
+    # Timeline section
+    limiter.set_section_budget("timeline")
     timeline_panel = Panel(
         limiter.join_bullets(response.sections.get("timeline"), default="No timeline available."),
         title="Timeline",
         expand=False,
     )
 
+    # Risk section
+    limiter.set_section_budget("risk")
     risk_panel = Panel(
         _build_risk_table(response.sections.get("risk_cards"), limiter),
         title="Risk Cards",
         expand=False,
     )
 
+    # Confidence section
+    limiter.set_section_budget("confidence")
     confidence_panel = Panel(
         limiter.consume(str(response.sections.get("confidence", "Confidence not available."))),
         title=f"Confidence ({response.confidence.get('value', '?')}%)",
         expand=False,
     )
 
+    # Actions section
+    limiter.set_section_budget("actions")
     actions_panel = Panel(
         limiter.join_bullets(response.sections.get("actions"), default="No actions provided."),
         title="Actions",
         expand=False,
     )
 
+    # Assumptions section
+    limiter.set_section_budget("assumptions")
     assumptions_panel = Panel(
         limiter.join_bullets(
             response.sections.get("assumptions"), default="No assumptions recorded."
@@ -94,11 +106,30 @@ def render_result(
 
 
 class _WordLimiter:
-    """Apply a global word cap across sections."""
+    """Apply a global word cap across sections with fair allocation."""
 
     def __init__(self, limit: int | None) -> None:
         self.limit = limit
         self.words_used = 0
+        # Allocate words per section for more predictable behavior
+        # Summary: 30%, Timeline: 25%, Risk: 20%, Confidence: 10%, Actions: 10%, Assumptions: 5%
+        self.section_allocations = {
+            "summary": 0.30,
+            "timeline": 0.25,
+            "risk": 0.20,
+            "confidence": 0.10,
+            "actions": 0.10,
+            "assumptions": 0.05,
+        }
+        self.current_section_budget = None
+
+    def set_section_budget(self, section: str) -> None:
+        """Set the budget for the current section."""
+        if self.limit is None:
+            self.current_section_budget = None
+        else:
+            allocation = self.section_allocations.get(section, 0.05)
+            self.current_section_budget = int(self.limit * allocation)
 
     def consume(self, text: str) -> str:
         if not text:
@@ -108,14 +139,30 @@ class _WordLimiter:
         words = text.split()
         if not words:
             return text
-        remaining = self.limit - self.words_used
-        if remaining <= 0:
+
+        # Check both global limit and section budget
+        global_remaining = self.limit - self.words_used
+        if global_remaining <= 0:
             return ""
-        if len(words) <= remaining:
+
+        # Use section budget if set, otherwise use global limit
+        effective_limit = global_remaining
+        if self.current_section_budget is not None:
+            effective_limit = min(global_remaining, self.current_section_budget)
+
+        if effective_limit <= 0:
+            return ""
+
+        if len(words) <= effective_limit:
             self.words_used += len(words)
+            if self.current_section_budget is not None:
+                self.current_section_budget -= len(words)
             return text
-        truncated = " ".join(words[:remaining]) + " …"
-        self.words_used = self.limit
+
+        truncated = " ".join(words[:effective_limit]) + " …"
+        self.words_used += effective_limit
+        if self.current_section_budget is not None:
+            self.current_section_budget = 0
         return truncated
 
     def join_lines(self, value: Any, *, default: str) -> str:
