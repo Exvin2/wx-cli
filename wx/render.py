@@ -6,11 +6,10 @@ import json
 from collections.abc import Iterable
 from typing import Any
 
-from rich.console import Console
-from rich.panel import Panel
-from rich.table import Table
+from rich.console import Console, Group
 from rich.text import Text
 
+from .design import DesignSystem
 from .visualizations import format_alert_severity
 
 
@@ -29,72 +28,83 @@ def render_result(
     response = result.response
     word_limit = None if verbose else 400
     limiter = _WordLimiter(word_limit)
+    ds = DesignSystem()
 
-    # Summary section
+    console.print()  # Top spacing
+
+    # Summary section - clean, no borders
     limiter.set_section_budget("summary")
-    summary_panel = Panel(
-        limiter.join_lines(response.sections.get("summary"), default="No summary provided."),
-        title="Summary",
-        expand=False,
-    )
+    console.print(ds.heading("Summary", level=1))
+    summary_text = limiter.join_lines(response.sections.get("summary"), default="No summary provided.")
+    console.print(Text(summary_text, style="white"))
+    console.print()
 
     # Timeline section
     limiter.set_section_budget("timeline")
-    timeline_panel = Panel(
-        limiter.join_bullets(response.sections.get("timeline"), default="No timeline available."),
-        title="Timeline",
-        expand=False,
-    )
+    console.print(ds.heading("Timeline", level=1))
+    timeline_items = _normalize_list(response.sections.get("timeline"))
+    if timeline_items:
+        for item in timeline_items:
+            consumed = limiter.consume(str(item))
+            if consumed:
+                console.print(ds.bullet_point(consumed))
+    else:
+        console.print(Text("No timeline available.", style="dim"))
+    console.print()
 
-    # Risk section
+    # Risk section - clean card layout
     limiter.set_section_budget("risk")
-    risk_content = _build_risk_cards(response.sections.get("risk_cards"), limiter)
-    risk_panel = Panel(
-        risk_content,
-        title="Risk Cards",
-        expand=False,
-    )
+    console.print(ds.heading("Risk Assessment", level=1))
+    _render_risk_cards_clean(response.sections.get("risk_cards"), limiter, console)
+    console.print()
 
     # Confidence section
     limiter.set_section_budget("confidence")
-    confidence_panel = Panel(
-        limiter.consume(str(response.sections.get("confidence", "Confidence not available."))),
-        title=f"Confidence ({response.confidence.get('value', '?')}%)",
-        expand=False,
-    )
+    confidence_value = response.confidence.get('value', '?')
+    console.print(ds.heading(f"Confidence  {confidence_value}%", level=1))
+    conf_text = limiter.consume(str(response.sections.get("confidence", "Confidence not available.")))
+    console.print(Text(conf_text, style="white"))
+    console.print()
 
     # Actions section
     limiter.set_section_budget("actions")
-    actions_panel = Panel(
-        limiter.join_bullets(response.sections.get("actions"), default="No actions provided."),
-        title="Actions",
-        expand=False,
-    )
+    console.print(ds.heading("Recommended Actions", level=1))
+    action_items = _normalize_list(response.sections.get("actions"))
+    if action_items:
+        for item in action_items:
+            consumed = limiter.consume(str(item))
+            if consumed:
+                console.print(ds.bullet_point(consumed, color="bright_green"))
+    else:
+        console.print(Text("No actions provided.", style="dim"))
+    console.print()
 
     # Assumptions section
     limiter.set_section_budget("assumptions")
-    assumptions_panel = Panel(
-        limiter.join_bullets(
-            response.sections.get("assumptions"), default="No assumptions recorded."
-        ),
-        title="Assumptions",
-        expand=False,
-    )
+    console.print(ds.heading("Assumptions", level=2))
+    assumption_items = _normalize_list(response.sections.get("assumptions"))
+    if assumption_items:
+        for item in assumption_items:
+            consumed = limiter.consume(str(item))
+            if consumed:
+                console.print(ds.bullet_point(consumed, color="bright_black"))
+    else:
+        console.print(Text("No assumptions recorded.", style="dim"))
+    console.print()
 
-    console.print(summary_panel)
-    console.print(timeline_panel)
-    console.print(risk_panel)
-    console.print(confidence_panel)
-    console.print(actions_panel)
-    console.print(assumptions_panel)
-
+    # Bottom line - prominent
+    console.print(ds.separator())
     bottom_line_text = limiter.consume(response.bottom_line or "Bottom line unavailable.")
-    console.print(Text(bottom_line_text, style="bold"))
+    console.print(Text(f"\n{bottom_line_text}\n", style="bold bright_blue"))
 
     if debug:
-        console.print(Panel(json.dumps(result.debug, indent=2), title="Debug"))
+        console.print(ds.separator())
+        console.print(ds.heading("Debug Information", level=2))
+        console.print(Text(json.dumps(result.debug, indent=2), style="dim"))
+        console.print()
+        console.print(ds.heading("AI Metadata", level=2))
         console.print(
-            Panel(
+            Text(
                 json.dumps(
                     {
                         "provider": response.provider,
@@ -103,7 +113,7 @@ def render_result(
                     },
                     indent=2,
                 ),
-                title="AI Metadata",
+                style="dim",
             )
         )
 
@@ -196,8 +206,8 @@ class _WordLimiter:
             return [str(value)]
 
 
-def _build_risk_cards(cards: Any, limiter: _WordLimiter) -> str:
-    """Build risk cards as formatted text instead of nested table."""
+def _render_risk_cards_clean(cards: Any, limiter: _WordLimiter, console: Console) -> None:
+    """Render risk cards with clean, modern design."""
     if isinstance(cards, dict) or isinstance(cards, (str, bytes)):
         records = []
     elif isinstance(cards, Iterable):
@@ -206,9 +216,13 @@ def _build_risk_cards(cards: Any, limiter: _WordLimiter) -> str:
         records = []
 
     if not records:
-        return "No specific risk cards available.\n• General risk level: Low\n• Insufficient data for detailed assessment"
+        console.print(Text("No specific risk cards available.", style="dim"))
+        console.print(Text("  General risk level: Low", style="bright_black"))
+        console.print(Text("  Insufficient data for detailed assessment", style="bright_black"))
+        return
 
-    lines = []
+    ds = DesignSystem()
+
     for i, card in enumerate(records, 1):
         if not isinstance(card, dict):
             continue
@@ -218,19 +232,53 @@ def _build_risk_cards(cards: Any, limiter: _WordLimiter) -> str:
         drivers = card.get("drivers", [])
         confidence = str(card.get("confidence", "Unknown"))
 
-        # Format each risk card
-        lines.append(f"[bold]{i}. {hazard}[/bold]")
-        lines.append(f"   Level: [yellow]{level}[/yellow]")
+        # Card number and hazard
+        title = Text()
+        title.append(f"{i}. ", style="bright_blue")
+        title.append(hazard, style="bold white")
+        console.print(title)
 
+        # Level with color coding
+        level_text = Text()
+        level_text.append("   Level: ", style="bright_black")
+        if "high" in level.lower() or "extreme" in level.lower():
+            level_text.append(level, style="bright_red")
+        elif "moderate" in level.lower() or "medium" in level.lower():
+            level_text.append(level, style="bright_yellow")
+        else:
+            level_text.append(level, style="bright_green")
+        console.print(level_text)
+
+        # Drivers
         if drivers:
             drivers_text = limiter.consume(", ".join(drivers))
-            lines.append(f"   Drivers: {drivers_text}")
+            if drivers_text:
+                info = Text()
+                info.append("   Drivers: ", style="bright_black")
+                info.append(drivers_text, style="white")
+                console.print(info)
 
+        # Confidence
         conf_text = limiter.consume(confidence)
-        lines.append(f"   Confidence: {conf_text}")
-        lines.append("")  # Blank line between cards
+        if conf_text:
+            conf_info = Text()
+            conf_info.append("   Confidence: ", style="bright_black")
+            conf_info.append(conf_text, style="bright_cyan")
+            console.print(conf_info)
 
-    return "\n".join(lines).rstrip()
+        console.print()  # Spacing between cards
+
+
+def _normalize_list(value: Any) -> list[str]:
+    """Normalize value to list of strings."""
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [value]
+    try:
+        return [str(item) for item in value if item]
+    except TypeError:
+        return [str(value)]
 
 
 def _result_to_json(result) -> str:
@@ -252,7 +300,7 @@ def _result_to_json(result) -> str:
 
 
 def render_worldview(worldview, *, console: Console, json_mode: bool = False, verbose: bool = False) -> None:
-    """Render worldview aggregate summary."""
+    """Render worldview aggregate summary with modern design."""
     if json_mode:
         payload = {
             "regions": [
@@ -275,43 +323,82 @@ def render_worldview(worldview, *, console: Console, json_mode: bool = False, ve
         console.print(json.dumps(payload, indent=2, ensure_ascii=True))
         return
 
-    # Check if severe weather mode
+    ds = DesignSystem()
     severe_only = worldview.meta.get("severe_only", False)
 
-    # Human-readable summary
-    for region in worldview.regions:
-        console.print(f"[bold]{region.name}[/bold] — {region.summary}")
+    console.print()
 
-    # Top risks with severe weather highlighting
+    # Title
+    if severe_only:
+        console.print(ds.heading("Severe Weather Alerts", level=1))
+    else:
+        console.print(ds.heading("Weather Overview", level=1))
+
+    console.print()
+
+    # Regional summaries - clean layout
+    for region in worldview.regions:
+        region_text = Text()
+        region_text.append(f"{region.name}", style="bold bright_cyan")
+        region_text.append(f"  {region.summary}", style="white")
+        console.print(region_text)
+
+    console.print()
+
+    # Alerts section
     all_alerts = []
     for region in worldview.regions:
         for alert in region.alerts:
             event = alert['event']
             count = alert.get('count', 1)
-            # Highlight severe weather events
             if _is_severe_alert(event):
-                all_alerts.append(f"[bold red]{event}[/bold red] ({count}) in {region.name}")
+                all_alerts.append((event, count, region.name, True))
             else:
-                all_alerts.append(f"[yellow]{event}[/yellow] ({count}) in {region.name}")
+                all_alerts.append((event, count, region.name, False))
 
     if all_alerts:
-        title = "[bold red]⚠️  SEVERE WEATHER ALERTS[/bold red]" if severe_only else "[bold yellow]Top risks[/bold yellow]"
-        risks_text = "; ".join(all_alerts[:5] if severe_only else all_alerts[:3])  # Show more in severe mode
-        console.print(f"\n{title} — {risks_text}")
+        if severe_only:
+            console.print(ds.heading("Active Severe Weather Alerts", level=2))
+        else:
+            console.print(ds.heading("Active Alerts", level=2))
+
+        # Display alerts with clean formatting
+        display_count = 5 if severe_only else 3
+        for event, count, region_name, is_severe in all_alerts[:display_count]:
+            alert_line = Text()
+            alert_line.append("  • ", style="bright_blue")
+            if is_severe:
+                alert_line.append(event, style="bold bright_red")
+            else:
+                alert_line.append(event, style="bright_yellow")
+            alert_line.append(f" ({count})", style="bright_black")
+            alert_line.append(f" in {region_name}", style="white")
+            console.print(alert_line)
+
+        console.print()
     else:
         if severe_only:
-            console.print("\n[bold green]✓ No severe weather alerts (floods, tornadoes, severe thunderstorms)[/bold green]")
+            success_msg = Text()
+            success_msg.append("  No severe weather alerts", style="bold bright_green")
+            console.print(success_msg)
+            console.print(Text("  No floods, tornadoes, or severe thunderstorms detected", style="dim"))
         else:
-            console.print("\n[bold green]No significant risks reported[/bold green]")
+            console.print(Text("  No significant risks reported", style="bright_green"))
+        console.print()
 
     if verbose:
-        # Show metadata
-        meta_text = f"Samples: US={worldview.meta.get('samples_us', 0)}, EU={worldview.meta.get('samples_eu', 0)} | "
-        meta_text += f"Fetch time: {worldview.meta.get('fetch_ms', 0)}ms | "
-        meta_text += f"Sources: {', '.join(worldview.meta.get('sources', []))}"
+        # Metadata with clean formatting
+        console.print(ds.separator())
+        meta_parts = [
+            f"Samples: US={worldview.meta.get('samples_us', 0)}, EU={worldview.meta.get('samples_eu', 0)}",
+            f"Fetch time: {worldview.meta.get('fetch_ms', 0)}ms",
+            f"Sources: {', '.join(worldview.meta.get('sources', []))}",
+        ]
         if severe_only:
-            meta_text += " | Filter: SEVERE ONLY"
-        console.print(f"\n[dim]{meta_text}[/dim]")
+            meta_parts.append("Filter: SEVERE ONLY")
+
+        console.print(Text("  ".join(meta_parts), style="dim"))
+        console.print()
 
 
 def _is_severe_alert(event: str) -> bool:

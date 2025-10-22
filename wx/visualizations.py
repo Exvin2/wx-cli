@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from rich.progress import BarColumn, Progress, TaskID, TextColumn
+from rich.console import Console
+from rich.text import Text
 
 
 def create_precipitation_bar(probability: float, width: int = 20) -> str:
@@ -247,3 +248,62 @@ def format_forecast_table(periods: list[dict[str, Any]]) -> str:
         lines.append(f"{name} | {temp}{temp_unit:>4} | {wind} | {forecast}")
 
     return "\n".join(lines)
+
+
+def format_forecast_table_modern(periods: list[dict[str, Any]], console: Console) -> None:
+    """Format forecast periods with modern, clean design.
+
+    Args:
+        periods: List of forecast period dictionaries
+        console: Rich console for output
+    """
+    if not periods:
+        console.print(Text("No forecast data available", style="dim"))
+        return
+
+    for i, period in enumerate(periods):
+        name = period.get("name", "Unknown")
+        temp = period.get("temperature", "?")
+        temp_unit = period.get("temperatureUnit", "F")
+        wind = period.get("windSpeed", "Unknown")
+        wind_dir = period.get("windDirection", "")
+        forecast = period.get("shortForecast", "Unknown")
+        detailed = period.get("detailedForecast", "")
+
+        # Period header with temperature
+        header = Text()
+        header.append(f"{name}", style="bold bright_cyan")
+        header.append(f"  {temp}°{temp_unit}", style="bold bright_blue")
+        console.print(header)
+
+        # Weather condition
+        condition_text = Text()
+        condition_text.append("  ", style="")
+
+        # Color code based on conditions
+        forecast_lower = forecast.lower()
+        if "storm" in forecast_lower or "severe" in forecast_lower:
+            style = "bright_red"
+        elif "rain" in forecast_lower or "snow" in forecast_lower or "shower" in forecast_lower:
+            style = "bright_yellow"
+        elif "cloud" in forecast_lower or "overcast" in forecast_lower:
+            style = "bright_black"
+        else:
+            style = "bright_green"
+
+        condition_text.append(forecast, style=style)
+        console.print(condition_text)
+
+        # Wind info
+        wind_text = Text()
+        wind_text.append("  Wind: ", style="bright_black")
+        wind_text.append(f"{wind_dir} {wind}", style="white")
+        console.print(wind_text)
+
+        # Detailed forecast (if available and not too long)
+        if detailed and len(detailed) < 150:
+            detail_text = Text()
+            detail_text.append(f"  {detailed}", style="dim")
+            console.print(detail_text)
+
+        console.print()  # Spacing between periods

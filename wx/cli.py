@@ -8,10 +8,11 @@ from collections.abc import Sequence
 
 import typer
 from rich.console import Console
-from rich.panel import Panel
+from rich.text import Text
 
 from .chat import start_chat_session
 from .config import PersonaLiteral, StyleLiteral, load_settings
+from .design import DesignSystem
 from .orchestrator import Orchestrator
 from .render import render_result, render_worldview
 
@@ -125,27 +126,29 @@ def explain(ctx: typer.Context):
         console.print(json.dumps(payload, indent=2))
         return
 
-    title = f"Explain ({outcome.mode})"
-    console.print(Panel(outcome.text or "No explanation available.", title=title, expand=False))
+    ds = DesignSystem()
+
+    console.print()
+    console.print(ds.heading(f"Explain ({outcome.mode})", level=1))
+    console.print(Text(outcome.text or "No explanation available.", style="white"))
+    console.print()
 
     if verbose or debug:
+        console.print(ds.heading("Metadata", level=2))
         meta_payload = dict(outcome.meta)
         meta_payload.setdefault("provider", outcome.response.provider)
         meta_payload.setdefault("prompt_summary", outcome.response.prompt_summary)
         meta_payload.setdefault("confidence", outcome.response.confidence)
-        console.print(Panel(json.dumps(meta_payload, indent=2), title="Explain Meta", expand=False))
+        console.print(Text(json.dumps(meta_payload, indent=2), style="dim"))
+        console.print()
 
     if debug:
-        console.print(
-            Panel(
-                json.dumps(outcome.response.sections, indent=2),
-                title="Explain Sections",
-                expand=False,
-            )
-        )
-        console.print(
-            Panel(json.dumps(outcome.feature_pack, indent=2), title="Feature Pack", expand=False)
-        )
+        console.print(ds.heading("Explain Sections", level=2))
+        console.print(Text(json.dumps(outcome.response.sections, indent=2), style="dim"))
+        console.print()
+        console.print(ds.heading("Feature Pack", level=2))
+        console.print(Text(json.dumps(outcome.feature_pack, indent=2), style="dim"))
+        console.print()
 
 
 @app.command()
@@ -184,18 +187,19 @@ def extended(
 ):
     """Get extended multi-day forecast for a location."""
     from .fetchers import get_nws_forecast_grid, get_point_context
-    from .visualizations import format_forecast_table
+    from .visualizations import format_forecast_table_modern
 
     orchestrator: Orchestrator = ctx.obj["orchestrator"]
     settings = ctx.obj["settings"]
     json_mode: bool = ctx.obj["json"]
+    ds = DesignSystem()
 
     # Resolve location
-    console.print(f"[dim]Fetching {days}-day forecast for {place}...[/dim]")
+    console.print(Text(f"Fetching {days}-day forecast for {place}...", style="dim"))
 
     place_info = get_point_context(place, offline=settings.offline)
     if not place_info:
-        console.print(f"[red]Could not find location: {place}[/red]")
+        console.print(Text(f"Could not find location: {place}", style="bright_red"))
         raise typer.Exit(1)
 
     lat = place_info["lat"]
@@ -212,14 +216,17 @@ def extended(
     if forecast_data and forecast_data.get("periods"):
         periods = forecast_data["periods"][:days * 2]  # 2 periods per day (day/night)
 
-        console.print(f"\n[bold cyan]Extended Forecast for {loc_name}[/bold cyan]\n")
+        console.print()
+        console.print(ds.heading(f"Extended Forecast - {loc_name}", level=1))
+        console.print()
 
-        table_text = format_forecast_table(periods)
-        console.print(table_text)
+        format_forecast_table_modern(periods, console)
 
-        console.print(f"\n[dim]Updated: {forecast_data.get('updated', 'Unknown')}[/dim]")
+        console.print()
+        console.print(Text(f"Updated: {forecast_data.get('updated', 'Unknown')}", style="dim"))
+        console.print()
     else:
-        console.print(f"[yellow]No extended forecast data available for {loc_name}.[/yellow]")
+        console.print(Text(f"No extended forecast data available for {loc_name}.", style="bright_yellow"))
 
 
 def _normalize_invocation(args: Sequence[str]) -> list[str]:

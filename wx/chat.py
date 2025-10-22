@@ -10,10 +10,11 @@ from pathlib import Path
 from typing import Any
 
 from rich.console import Console
-from rich.panel import Panel
 from rich.prompt import Prompt
+from rich.text import Text
 
 from .config import Settings
+from .design import DesignSystem
 from .orchestrator import Orchestrator
 
 
@@ -179,16 +180,18 @@ class ChatInterface:
 
         while True:
             try:
-                user_input = Prompt.ask("\n[bold cyan]You[/bold cyan]")
+                user_input = Prompt.ask("\n[bright_blue]▶[/bright_blue]")
 
                 # Handle special commands
                 if user_input.lower() in {"/quit", "/exit", "/bye"}:
                     # Save session before quitting
                     if not self.settings.privacy_mode:
                         self.session.save_to_file(session_file)
+                    self.console.print()
                     self.console.print(
-                        "[yellow]Thanks for using wx chat! Stay weather-aware.[/yellow]"
+                        Text("Thanks for using wx chat! Stay weather-aware.", style="bright_cyan")
                     )
+                    self.console.print()
                     break
 
                 if user_input.lower() in {"/help", "/?"}:
@@ -233,55 +236,80 @@ class ChatInterface:
                 break
 
     def _show_welcome(self) -> None:
-        """Display welcome message."""
-        welcome_text = """
-[bold cyan]Welcome to wx AI Weather Bot![/bold cyan]
+        """Display welcome message with modern design."""
+        ds = DesignSystem()
 
-I can help you with:
-  • Real-time weather conditions from NWS and other sources
-  • Weather forecasts for any location
-  • Severe weather alerts and risk assessments
-  • Natural language weather questions
+        self.console.print()
+        self.console.print(ds.heading("wx AI Weather Bot", level=1))
+        self.console.print()
 
-[dim]Commands:[/dim]
-  /help      - Show available commands
-  /location  - Set your default location (e.g., /location Denver, CO)
-  /widget    - Show current weather for your location
-  /favorites - List saved favorite locations
-  /save      - Save current conversation session
-  /clear     - Clear conversation history
-  /quit      - Exit chat
+        self.console.print(Text("I can help you with:", style="white"))
+        self.console.print(ds.bullet_point("Real-time weather conditions from NWS and other sources"))
+        self.console.print(ds.bullet_point("Weather forecasts for any location"))
+        self.console.print(ds.bullet_point("Severe weather alerts and risk assessments"))
+        self.console.print(ds.bullet_point("Natural language weather questions"))
+        self.console.print()
 
-[dim]Just ask me anything about the weather![/dim]
-        """
-        self.console.print(Panel(welcome_text, title="NWS AI Weather Bot", border_style="cyan"))
+        self.console.print(ds.heading("Commands", level=2))
+        self.console.print(ds.info_row("/help", "Show available commands", indent=1))
+        self.console.print(ds.info_row("/location", "Set your default location", indent=1))
+        self.console.print(ds.info_row("/widget", "Show current weather", indent=1))
+        self.console.print(ds.info_row("/favorites", "List saved locations", indent=1))
+        self.console.print(ds.info_row("/save", "Save conversation", indent=1))
+        self.console.print(ds.info_row("/clear", "Clear history", indent=1))
+        self.console.print(ds.info_row("/quit", "Exit chat", indent=1))
+        self.console.print()
+
+        self.console.print(Text("Just ask me anything about the weather!", style="dim"))
+        self.console.print(ds.separator())
+        self.console.print()
 
     def _show_help(self) -> None:
-        """Display help information."""
-        help_text = """
-[bold]Available Commands:[/bold]
+        """Display help information with modern design."""
+        ds = DesignSystem()
 
-  /location <place>  - Set default location context
-  /widget           - Show current weather widget for your location
-  /favorites        - List saved favorite locations
-  /save             - Save current conversation session
-  /clear            - Clear conversation history
-  /help or /?       - Show this help message
-  /quit or /exit    - Exit the chat
+        self.console.print()
+        self.console.print(ds.heading("Help", level=1))
+        self.console.print()
 
-[bold]Example Questions:[/bold]
+        self.console.print(ds.heading("Available Commands", level=2))
+        commands = [
+            ("/location <place>", "Set default location context"),
+            ("/widget", "Show current weather widget"),
+            ("/favorites", "List saved favorite locations"),
+            ("/save", "Save current conversation"),
+            ("/clear", "Clear conversation history"),
+            ("/help or /?", "Show this help message"),
+            ("/quit or /exit", "Exit the chat"),
+        ]
+        for cmd, desc in commands:
+            cmd_text = Text()
+            cmd_text.append(f"  {cmd}", style="bright_cyan")
+            cmd_text.append(f"  {desc}", style="white")
+            self.console.print(cmd_text)
+        self.console.print()
 
-  • What's the weather like in Seattle?
-  • Are there any severe weather alerts in Texas?
-  • Should I worry about flooding in Miami today?
-  • What's the forecast for tomorrow in Denver?
-  • Tell me about current weather conditions nationwide
-  • Show me marine conditions for coastal areas
-  • What's the aviation weather at KDEN?
+        self.console.print(ds.heading("Example Questions", level=2))
+        examples = [
+            "What's the weather like in Seattle?",
+            "Are there any severe weather alerts in Texas?",
+            "Should I worry about flooding in Miami today?",
+            "What's the forecast for tomorrow in Denver?",
+            "Tell me about current weather conditions nationwide",
+            "Show me marine conditions for coastal areas",
+            "What's the aviation weather at KDEN?",
+        ]
+        for example in examples:
+            self.console.print(ds.bullet_point(example))
+        self.console.print()
 
-[dim]You can ask questions in natural language - I'll fetch live data from NWS and other sources to answer.[/dim]
-        """
-        self.console.print(Panel(help_text, title="Help", border_style="yellow"))
+        self.console.print(
+            Text(
+                "You can ask questions in natural language - I'll fetch live data from NWS and other sources.",
+                style="dim",
+            )
+        )
+        self.console.print()
 
     def _set_location_context(self, location: str) -> None:
         """Set the location context for the conversation."""
@@ -344,7 +372,7 @@ I can help you with:
 
             # Render the result
             if not json_mode:
-                self.console.print("[bold green]AI Bot:[/bold green]")
+                self.console.print()
 
             render_result(
                 result,
@@ -390,9 +418,9 @@ I can help you with:
         return self.session.save_to_file(session_file)
 
     def _show_weather_widget(self) -> None:
-        """Show current weather widget for location context."""
+        """Show current weather widget with modern design."""
         if not self.session.location_context:
-            self.console.print("[yellow]No location set. Use /location <place> first.[/yellow]")
+            self.console.print(Text("No location set. Use /location <place> first.", style="bright_yellow"))
             return
 
         from .fetchers import get_quick_obs
@@ -402,29 +430,45 @@ I can help you with:
         loc_name = self.session.location_context.get("resolved", "Unknown")
 
         if lat is None or lon is None:
-            self.console.print("[red]Invalid location coordinates.[/red]")
+            self.console.print(Text("Invalid location coordinates.", style="bright_red"))
             return
 
-        self.console.print(f"[dim]Fetching weather for {loc_name}...[/dim]")
+        self.console.print(Text(f"Fetching weather for {loc_name}...", style="dim"))
 
         obs = get_quick_obs(lat, lon, offline=self.settings.offline)
 
         if obs:
-            from .visualizations import create_humidity_bar, create_precipitation_bar
+            ds = DesignSystem()
 
-            widget_lines = [
-                f"[bold]{loc_name}[/bold]",
-                f"Temperature: {obs.get('temp', '?')}C (Feels like: {obs.get('feels_like', '?')}C)",
-                f"Wind: {obs.get('wind', '?')} m/s (Gusts: {obs.get('gust', '?')} m/s)",
-                f"Visibility: {obs.get('vis_km', '?')} km",
-                f"Ceiling: {obs.get('ceiling_m', '?')} m",
-            ]
+            self.console.print()
+            self.console.print(ds.heading(f"Current Weather - {loc_name}", level=1))
+            self.console.print()
 
-            widget_text = "\n".join(widget_lines)
-            widget_panel = Panel(widget_text, title="Current Weather", expand=False)
-            self.console.print(widget_panel)
+            # Temperature
+            temp_text = Text()
+            temp_text.append("  ", style="")
+            temp_text.append(f"{obs.get('temp', '?')}°C", style="bold bright_blue")
+            temp_text.append(f"  feels like {obs.get('feels_like', '?')}°C", style="bright_black")
+            self.console.print(temp_text)
+
+            # Wind
+            self.console.print(
+                ds.info_row(
+                    "Wind:",
+                    f"{obs.get('wind', '?')} m/s (gusts: {obs.get('gust', '?')} m/s)",
+                    indent=1,
+                )
+            )
+
+            # Visibility
+            self.console.print(ds.info_row("Visibility:", f"{obs.get('vis_km', '?')} km", indent=1))
+
+            # Ceiling
+            self.console.print(ds.info_row("Ceiling:", f"{obs.get('ceiling_m', '?')} m", indent=1))
+
+            self.console.print()
         else:
-            self.console.print("[yellow]No weather data available.[/yellow]")
+            self.console.print(Text("No weather data available.", style="bright_yellow"))
 
     def _show_favorites(self) -> None:
         """Show list of favorite locations."""
