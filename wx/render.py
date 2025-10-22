@@ -46,8 +46,9 @@ def render_result(
 
     # Risk section
     limiter.set_section_budget("risk")
+    risk_content = _build_risk_cards(response.sections.get("risk_cards"), limiter)
     risk_panel = Panel(
-        _build_risk_table(response.sections.get("risk_cards"), limiter),
+        risk_content,
         title="Risk Cards",
         expand=False,
     )
@@ -193,32 +194,41 @@ class _WordLimiter:
             return [str(value)]
 
 
-def _build_risk_table(cards: Any, limiter: _WordLimiter) -> Table:
-    table = Table(show_header=True, header_style="bold magenta")
-    table.add_column("Hazard")
-    table.add_column("Level")
-    table.add_column("Drivers")
-    table.add_column("Confidence")
-
+def _build_risk_cards(cards: Any, limiter: _WordLimiter) -> str:
+    """Build risk cards as formatted text instead of nested table."""
     if isinstance(cards, dict) or isinstance(cards, (str, bytes)):
         records = []
     elif isinstance(cards, Iterable):
-        records = cards
+        records = list(cards)
     else:
         records = []
-    added = False
-    for card in records:
+
+    if not records:
+        return "No specific risk cards available.\n• General risk level: Low\n• Insufficient data for detailed assessment"
+
+    lines = []
+    for i, card in enumerate(records, 1):
         if not isinstance(card, dict):
             continue
+
         hazard = str(card.get("hazard", "Unknown"))
-        level = str(card.get("level", ""))
-        drivers = limiter.consume(", ".join(card.get("drivers", [])))
-        confidence = limiter.consume(str(card.get("confidence", "")))
-        table.add_row(hazard, level, drivers, confidence)
-        added = True
-    if not added:
-        table.add_row("General", "Low", "Insufficient data", "Low confidence")
-    return table
+        level = str(card.get("level", "Unknown"))
+        drivers = card.get("drivers", [])
+        confidence = str(card.get("confidence", "Unknown"))
+
+        # Format each risk card
+        lines.append(f"[bold]{i}. {hazard}[/bold]")
+        lines.append(f"   Level: [yellow]{level}[/yellow]")
+
+        if drivers:
+            drivers_text = limiter.consume(", ".join(drivers))
+            lines.append(f"   Drivers: {drivers_text}")
+
+        conf_text = limiter.consume(confidence)
+        lines.append(f"   Confidence: {conf_text}")
+        lines.append("")  # Blank line between cards
+
+    return "\n".join(lines).rstrip()
 
 
 def _result_to_json(result) -> str:
