@@ -4,6 +4,7 @@ wx is a conversational AI weather assistant that provides real-time weather data
 
 ## Highlights
 - **Conversational AI Bot**: Interactive chat mode with session persistence and weather widgets
+- **Live Weather Radar**: Real-time animated radar loops with terminal visualization and GUI support
 - **Live NWS Data**: Real-time alerts, forecasts, observations, and gridded data from NOAA
 - **Extended Forecasts**: Multi-day forecasts with temperature trends and visualizations
 - **Marine Weather**: NOAA buoy data and marine forecasts for coastal areas
@@ -11,6 +12,7 @@ wx is a conversational AI weather assistant that provides real-time weather data
 - **Location Favorites**: Save and quickly access your favorite locations
 - **EU Weather Alerts**: Full MeteoAlarm XML parsing for European weather warnings
 - **Color-Coded Alerts**: Visual severity indicators (red for extreme, yellow for moderate)
+- **Modern Clean UI**: Inspired by Claude, Codex, and Material Design with minimal borders
 - **Secure & Private**: API key validation and restricted file permissions for cached data
 - **Smart Rendering**: Improved word limiting with fair allocation across response sections
 - **Timezone Aware**: Properly handles local timezones in forecast windows
@@ -88,6 +90,26 @@ In chat mode, you can:
 - Extended multi-day forecast:
   ```bash
   wx extended "Denver" --days 7
+  ```
+- **Live Weather Radar** (NEW!):
+  ```bash
+  # List available radar stations
+  wx radar --list
+
+  # Display radar for specific station
+  wx radar KOKX
+
+  # Find nearest station for a location
+  wx radar --place "New York"
+
+  # Animated radar loop
+  wx radar KOKX --animate
+
+  # Open in GUI window
+  wx radar KDMX --gui
+
+  # Control animation
+  wx radar KFTG --animate --frames 15 --delay 0.3
   ```
 
 ### Global Options

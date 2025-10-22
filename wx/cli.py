@@ -16,7 +16,7 @@ from .design import DesignSystem
 from .orchestrator import Orchestrator
 from .render import render_result, render_worldview
 
-COMMAND_NAMES = {"forecast", "risk", "explain", "alerts", "chat", "extended"}
+COMMAND_NAMES = {"forecast", "risk", "explain", "alerts", "chat", "extended", "radar"}
 _OPTIONS_WITH_VALUES = {"--style", "--persona"}
 
 
@@ -227,6 +227,111 @@ def extended(
         console.print()
     else:
         console.print(Text(f"No extended forecast data available for {loc_name}.", style="bright_yellow"))
+
+
+@app.command()
+def radar(
+    ctx: typer.Context,
+    station: str | None = typer.Argument(None, help="Radar station ID (e.g., KOKX, KDMX). Leave empty to auto-detect."),
+    place: str | None = typer.Option(None, "--place", "-p", help="Location to find nearest radar station."),  # noqa: B008
+    animate: bool = typer.Option(False, "--animate", "-a", help="Show animated radar loop."),  # noqa: B008
+    frames: int = typer.Option(10, "--frames", "-f", help="Number of frames for animation."),  # noqa: B008
+    delay: float = typer.Option(0.5, "--delay", "-d", help="Delay between frames in seconds."),  # noqa: B008
+    gui: bool = typer.Option(False, "--gui", "-g", help="Open GUI window for radar display."),  # noqa: B008
+    list_stations: bool = typer.Option(False, "--list", "-l", help="List nearby radar stations."),  # noqa: B008
+):
+    """Display live weather radar with optional animation."""
+    from .fetchers import get_point_context
+    from .radar import RadarFetcher, display_radar
+
+    settings = ctx.obj["settings"]
+    ds = DesignSystem()
+
+    if settings.offline:
+        console.print(Text("Radar not available in offline mode", style="bright_yellow"))
+        return
+
+    fetcher = RadarFetcher()
+
+    # List stations mode
+    if list_stations:
+        console.print()
+        console.print(ds.heading("Available Radar Stations", level=1))
+        console.print()
+
+        if place:
+            # Find stations near place
+            place_info = get_point_context(place, offline=False)
+            if place_info:
+                lat = place_info["lat"]
+                lon = place_info["lon"]
+                stations = fetcher.get_available_stations_near(lat, lon, count=10)
+
+                console.print(Text(f"Stations near {place_info.get('resolved', place)}:", style="bright_cyan"))
+                console.print()
+
+                for station_id, name in stations:
+                    console.print(ds.info_row(station_id, name, indent=1))
+            else:
+                console.print(Text(f"Could not find location: {place}", style="bright_red"))
+        else:
+            # List some major stations
+            major_stations = [
+                ("KOKX", "New York, NY"),
+                ("KDMX", "Des Moines, IA"),
+                ("KFTG", "Denver, CO"),
+                ("KFFC", "Atlanta, GA"),
+                ("KHGX", "Houston, TX"),
+                ("KLAX", "Los Angeles, CA"),
+                ("KSEA", "Seattle, WA"),
+                ("KMIA", "Miami, FL"),
+                ("KORD", "Chicago, IL"),
+                ("KDFW", "Dallas, TX"),
+            ]
+
+            console.print(Text("Major Radar Stations:", style="bright_cyan"))
+            console.print()
+
+            for station_id, name in major_stations:
+                if station_id in fetcher.RADAR_STATIONS:
+                    console.print(ds.info_row(station_id, fetcher.RADAR_STATIONS[station_id], indent=1))
+
+        console.print()
+        console.print(Text("Use: wx radar <STATION_ID> to view radar", style="dim"))
+        console.print(Text("Example: wx radar KOKX --animate", style="dim"))
+        console.print()
+        return
+
+    # Determine station
+    if not station:
+        if place:
+            # Find nearest station to place
+            place_info = get_point_context(place, offline=False)
+            if place_info:
+                lat = place_info["lat"]
+                lon = place_info["lon"]
+                station = fetcher.find_nearest_station(lat, lon)
+                console.print(Text(f"Using nearest station for {place_info.get('resolved', place)}: {station}", style="dim"))
+            else:
+                console.print(Text(f"Could not find location: {place}", style="bright_red"))
+                return
+        else:
+            # Default station
+            station = "KDMX"
+            console.print(Text(f"No station specified, using default: {station}", style="dim"))
+            console.print(Text("Tip: Use --list to see available stations", style="dim"))
+            console.print()
+
+    # Display radar
+    display_radar(
+        station,
+        animate=animate,
+        frames=frames,
+        delay=delay,
+        gui=gui,
+        offline=settings.offline,
+        console=console,
+    )
 
 
 def _normalize_invocation(args: Sequence[str]) -> list[str]:
