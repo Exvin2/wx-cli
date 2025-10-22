@@ -379,11 +379,30 @@ class Orchestrator:
             if parsed:
                 start = parsed.astimezone(UTC)
         end = start + timedelta(hours=horizon_hours)
-        return {
+
+        # Include both UTC and local timezone information
+        window = {
             "start_iso": start.isoformat(),
             "end_iso": end.isoformat(),
             "horizon": f"{horizon_hours}h",
         }
+
+        # Add local timezone information if available
+        if tz_name:
+            try:
+                from zoneinfo import ZoneInfo
+
+                local_tz = ZoneInfo(tz_name)
+                start_local = start.astimezone(local_tz)
+                end_local = end.astimezone(local_tz)
+                window["start_local"] = start_local.isoformat()
+                window["end_local"] = end_local.isoformat()
+                window["timezone"] = tz_name
+            except Exception:  # noqa: BLE001
+                # If timezone conversion fails, just use UTC
+                pass
+
+        return window
 
     def _parse_horizon(self, horizon: str) -> int:
         mapping = {"6h": 6, "12h": 12, "24h": 24, "3d": 72}
