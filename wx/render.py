@@ -11,6 +11,8 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
+from .visualizations import format_alert_severity
+
 
 def render_result(
     result,
@@ -285,11 +287,12 @@ def render_worldview(worldview, *, console: Console, json_mode: bool = False, ve
     for region in worldview.regions:
         for alert in region.alerts:
             event = alert['event']
+            count = alert.get('count', 1)
             # Highlight severe weather events
             if _is_severe_alert(event):
-                all_alerts.append(f"[bold red]{event}[/bold red] in {region.name}")
+                all_alerts.append(f"[bold red]{event}[/bold red] ({count}) in {region.name}")
             else:
-                all_alerts.append(f"{event} in {region.name}")
+                all_alerts.append(f"[yellow]{event}[/yellow] ({count}) in {region.name}")
 
     if all_alerts:
         title = "[bold red]⚠️  SEVERE WEATHER ALERTS[/bold red]" if severe_only else "[bold yellow]Top risks[/bold yellow]"

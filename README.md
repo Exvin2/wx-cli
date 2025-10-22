@@ -3,12 +3,15 @@
 wx is a conversational AI weather assistant that provides real-time weather data from the National Weather Service (NWS) and other sources. It combines powerful AI models with live weather data to answer your questions naturally.
 
 ## Highlights
-- **Conversational AI Bot**: Interactive chat mode for natural language weather queries
+- **Conversational AI Bot**: Interactive chat mode with session persistence and weather widgets
 - **Live NWS Data**: Real-time alerts, forecasts, observations, and gridded data from NOAA
-- **Enhanced Data Fetching**: Comprehensive NWS integration including forecast grids, observation stations, and hourly forecasts
+- **Extended Forecasts**: Multi-day forecasts with temperature trends and visualizations
+- **Marine Weather**: NOAA buoy data and marine forecasts for coastal areas
+- **Aviation Weather**: METAR/TAF data for airports and flight planning
+- **Location Favorites**: Save and quickly access your favorite locations
 - **EU Weather Alerts**: Full MeteoAlarm XML parsing for European weather warnings
+- **Color-Coded Alerts**: Visual severity indicators (red for extreme, yellow for moderate)
 - **Secure & Private**: API key validation and restricted file permissions for cached data
-- **Multiple Modes**: Freeform questions, structured forecasts, risk assessment, and interactive chat
 - **Smart Rendering**: Improved word limiting with fair allocation across response sections
 - **Timezone Aware**: Properly handles local timezones in forecast windows
 - Routes through OpenRouter (Grok → ChatGPT OSS) with automatic Gemini fallback
@@ -52,7 +55,12 @@ wx chat
 In chat mode, you can:
 - Ask questions naturally: "What's the weather like in Seattle?"
 - Set location context: `/location Denver, CO`
+- Show current conditions: `/widget`
+- View favorite locations: `/favorites`
+- Save conversation: `/save`
 - Get severe weather alerts: "Are there any tornado warnings in Oklahoma?"
+- Ask about marine conditions: "Show me buoy data for the coast"
+- Ask about aviation weather: "What's the METAR for KDEN?"
 - Clear history: `/clear`
 - Exit: `/quit` or Ctrl+D
 
@@ -76,6 +84,10 @@ In chat mode, you can:
 - Explain last run (requires `PRIVACY_MODE=0` so the Feature Pack can be cached):
   ```bash
   wx explain
+  ```
+- Extended multi-day forecast:
+  ```bash
+  wx extended "Denver" --days 7
   ```
 
 ### Global Options
@@ -146,10 +158,18 @@ wx forecast "Chicago" --horizon 24h --when "tomorrow 3pm"
 # Risk assessment for multiple hazards
 wx risk "Miami" --hazards flooding,wind,storm --verbose
 
-# Interactive conversation with location context
+# Extended 14-day forecast with full details
+wx extended "Seattle" --days 14 --verbose
+
+# Interactive conversation with location context and weather widget
 wx chat
 # Then in chat: /location Portland, OR
+# Then: /widget (shows current conditions)
+# Then: /save (saves conversation for later)
 # Then ask: What's the forecast for tomorrow?
+
+# Check severe weather nationwide with color-coded alerts
+wx --severe
 ```
 
 ## License

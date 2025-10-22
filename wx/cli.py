@@ -15,7 +15,7 @@ from .config import PersonaLiteral, StyleLiteral, load_settings
 from .orchestrator import Orchestrator
 from .render import render_result, render_worldview
 
-COMMAND_NAMES = {"forecast", "risk", "explain", "alerts", "chat"}
+COMMAND_NAMES = {"forecast", "risk", "explain", "alerts", "chat", "extended"}
 _OPTIONS_WITH_VALUES = {"--style", "--persona"}
 
 
@@ -173,6 +173,53 @@ def chat(
     orchestrator: Orchestrator = ctx.obj["orchestrator"]
     json_mode: bool = ctx.obj["json"]
     start_chat_session(settings, orchestrator, console, verbose=verbose, json_mode=json_mode)
+
+
+@app.command()
+def extended(
+    ctx: typer.Context,
+    place: str = typer.Argument(..., help="Target place name or lat,lon."),
+    days: int = typer.Option(7, "--days", help="Number of days for extended forecast (max 14)."),  # noqa: B008
+    verbose: bool = typer.Option(False, "--verbose", help="Allow responses beyond 400 words."),  # noqa: B008
+):
+    """Get extended multi-day forecast for a location."""
+    from .fetchers import get_nws_forecast_grid, get_point_context
+    from .visualizations import format_forecast_table
+
+    orchestrator: Orchestrator = ctx.obj["orchestrator"]
+    settings = ctx.obj["settings"]
+    json_mode: bool = ctx.obj["json"]
+
+    # Resolve location
+    console.print(f"[dim]Fetching {days}-day forecast for {place}...[/dim]")
+
+    place_info = get_point_context(place, offline=settings.offline)
+    if not place_info:
+        console.print(f"[red]Could not find location: {place}[/red]")
+        raise typer.Exit(1)
+
+    lat = place_info["lat"]
+    lon = place_info["lon"]
+    loc_name = place_info.get("resolved", place)
+
+    # Get NWS gridded forecast
+    forecast_data = get_nws_forecast_grid(lat, lon, offline=settings.offline)
+
+    if json_mode:
+        console.print(json.dumps(forecast_data, indent=2))
+        return
+
+    if forecast_data and forecast_data.get("periods"):
+        periods = forecast_data["periods"][:days * 2]  # 2 periods per day (day/night)
+
+        console.print(f"\n[bold cyan]Extended Forecast for {loc_name}[/bold cyan]\n")
+
+        table_text = format_forecast_table(periods)
+        console.print(table_text)
+
+        console.print(f"\n[dim]Updated: {forecast_data.get('updated', 'Unknown')}[/dim]")
+    else:
+        console.print(f"[yellow]No extended forecast data available for {loc_name}.[/yellow]")
 
 
 def _normalize_invocation(args: Sequence[str]) -> list[str]:
