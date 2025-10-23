@@ -16,7 +16,10 @@ from .design import DesignSystem
 from .orchestrator import Orchestrator
 from .render import render_result, render_worldview
 
-COMMAND_NAMES = {"forecast", "risk", "explain", "alerts", "chat", "extended", "radar"}
+COMMAND_NAMES = {
+    "forecast", "risk", "explain", "alerts", "chat", "extended", "radar",
+    "international", "lightning", "aqi", "hurricanes", "notify", "dashboard"
+}
 _OPTIONS_WITH_VALUES = {"--style", "--persona"}
 
 
@@ -329,6 +332,240 @@ def radar(
         frames=frames,
         delay=delay,
         gui=gui,
+        offline=settings.offline,
+        console=console,
+    )
+
+
+@app.command()
+def international(
+    ctx: typer.Context,
+    location: str = typer.Argument(..., help="Location name (e.g., 'London', 'Toronto')"),
+    forecast: bool = typer.Option(True, "--forecast/--no-forecast", help="Show forecast"),  # noqa: B008
+    observations: bool = typer.Option(True, "--observations/--no-observations", help="Show observations"),  # noqa: B008
+):
+    """Get weather from international sources (UK Met Office, Environment Canada, etc.)."""
+    from .international import get_international_weather
+
+    settings = ctx.obj["settings"]
+    ds = DesignSystem()
+
+    # Get API keys from environment
+    import os
+    api_keys = {
+        "metoffice": os.environ.get("METOFFICE_API_KEY"),
+    }
+
+    console.print()
+    console.print(ds.heading(f"International Weather: {location}", level=1))
+    console.print()
+
+    result = get_international_weather(
+        location,
+        api_keys=api_keys,
+        offline=settings.offline,
+    )
+
+    if result["error"]:
+        console.print(Text(f"Error: {result['error']}", style="bright_red"))
+        if "API key" in result["error"]:
+            console.print()
+            console.print(Text("Set your API key:", style="dim"))
+            console.print(Text("  Met Office: export METOFFICE_API_KEY=your_key_here", style="dim"))
+            console.print(Text("  Get a free key at: https://www.metoffice.gov.uk/datapoint", style="dim"))
+        console.print()
+        return
+
+    console.print(Text(f"Data source: {result['service']}", style="bright_cyan"))
+    console.print()
+
+    if result["data"]:
+        # Format and display data
+        if result["service"] == "metoffice" and "forecast" in result["data"]:
+            from .international import format_metoffice_forecast
+            forecast_text = format_metoffice_forecast(result["data"]["forecast"])
+            console.print(forecast_text)
+        else:
+            console.print(Text("Data received but formatting not yet implemented", style="dim"))
+            console.print(Text("Raw data available in JSON mode", style="dim"))
+    else:
+        console.print(Text("No data available", style="bright_yellow"))
+
+    console.print()
+
+
+@app.command()
+def lightning(
+    ctx: typer.Context,
+    place: str = typer.Argument(..., help="Location to check for lightning"),
+    radius: int = typer.Option(100, "--radius", "-r", help="Search radius in km"),  # noqa: B008
+    animate: bool = typer.Option(False, "--animate", "-a", help="Animate strikes"),  # noqa: B008
+    show_map: bool = typer.Option(False, "--map", "-m", help="Show density map"),  # noqa: B008
+):
+    """Display real-time lightning strike data."""
+    from .fetchers import get_point_context
+    from .lightning import display_lightning
+
+    settings = ctx.obj["settings"]
+
+    # Resolve location
+    place_info = get_point_context(place, offline=settings.offline)
+    if not place_info:
+        console.print(Text(f"Could not find location: {place}", style="bright_red"))
+        return
+
+    lat = place_info["lat"]
+    lon = place_info["lon"]
+    loc_name = place_info.get("resolved", place)
+
+    console.print(Text(f"Lightning data for {loc_name} (within {radius}km)...", style="dim"))
+
+    display_lightning(
+        lat,
+        lon,
+        radius_km=radius,
+        animate=animate,
+        show_map=show_map,
+        offline=settings.offline,
+        console=console,
+    )
+
+
+@app.command()
+def aqi(
+    ctx: typer.Context,
+    place: str = typer.Argument(..., help="Location to check air quality"),
+    region: str = typer.Option("US", "--region", "-r", help="Region: US or UK"),  # noqa: B008
+):
+    """Display Air Quality Index (AQI) data."""
+    from .airquality import display_air_quality
+    from .fetchers import get_point_context
+
+    settings = ctx.obj["settings"]
+
+    # Resolve location
+    place_info = get_point_context(place, offline=settings.offline)
+    if not place_info:
+        console.print(Text(f"Could not find location: {place}", style="bright_red"))
+        return
+
+    lat = place_info["lat"]
+    lon = place_info["lon"]
+    loc_name = place_info.get("resolved", place)
+
+    # Get API key from environment
+    import os
+    api_key = os.environ.get("AIRNOW_API_KEY")
+
+    if not api_key and not settings.offline:
+        console.print(Text("Note: AirNow API key not set, using offline data", style="bright_yellow"))
+        console.print(Text("Get a free key at: https://docs.airnowapi.org/", style="dim"))
+        console.print()
+
+    display_air_quality(
+        lat,
+        lon,
+        location=loc_name,
+        region=region.upper(),
+        api_key=api_key,
+        offline=settings.offline,
+        console=console,
+    )
+
+
+@app.command()
+def hurricanes(
+    ctx: typer.Context,
+    show_scale: bool = typer.Option(False, "--scale", "-s", help="Show Saffir-Simpson scale"),  # noqa: B008
+    show_map: bool = typer.Option(False, "--map", "-m", help="Show storm position map"),  # noqa: B008
+):
+    """Display active hurricanes and tropical storms."""
+    from .hurricanes import display_hurricanes
+
+    settings = ctx.obj["settings"]
+
+    display_hurricanes(
+        show_scale=show_scale,
+        show_map=show_map,
+        offline=settings.offline,
+        console=console,
+    )
+
+
+@app.command()
+def notify(
+    ctx: typer.Context,
+    action: str = typer.Argument("list", help="Action: list, add, remove, toggle"),
+    name: str | None = typer.Argument(None, help="Rule name"),  # noqa: B008
+    condition: str | None = typer.Argument(None, help='Condition (e.g., "temp < 32")'),  # noqa: B008
+    location: str | None = typer.Argument(None, help="Location to monitor"),  # noqa: B008
+):
+    """Manage weather notification rules."""
+    from .notifications import NotificationManager, display_notification_config
+
+    settings = ctx.obj["settings"]
+    config_dir = settings.state_file.parent
+
+    manager = NotificationManager(config_dir)
+
+    if action == "list":
+        display_notification_config(config_dir, console)
+
+    elif action == "add":
+        if not all([name, condition, location]):
+            console.print(Text("Error: add requires name, condition, and location", style="bright_red"))
+            console.print(Text('Example: wx notify add freeze "temp < 32" Denver', style="dim"))
+            return
+
+        if manager.add_rule(name, condition, location):
+            console.print(Text(f"✓ Added rule: {name}", style="bright_green"))
+        else:
+            console.print(Text("Failed to add rule", style="bright_red"))
+
+    elif action == "remove":
+        if not name:
+            console.print(Text("Error: remove requires rule name", style="bright_red"))
+            return
+
+        if manager.remove_rule(name):
+            console.print(Text(f"✓ Removed rule: {name}", style="bright_green"))
+        else:
+            console.print(Text(f"Rule not found: {name}", style="bright_yellow"))
+
+    elif action == "toggle":
+        if not name:
+            console.print(Text("Error: toggle requires rule name", style="bright_red"))
+            return
+
+        if manager.toggle_rule(name):
+            console.print(Text(f"✓ Toggled rule: {name}", style="bright_green"))
+        else:
+            console.print(Text(f"Rule not found: {name}", style="bright_yellow"))
+
+    else:
+        console.print(Text(f"Unknown action: {action}", style="bright_red"))
+        console.print(Text("Valid actions: list, add, remove, toggle", style="dim"))
+
+
+@app.command()
+def dashboard(
+    ctx: typer.Context,
+    locations: list[str] = typer.Argument(..., help="Locations to compare (space-separated)"),
+    mode: str = typer.Option("compare", "--mode", "-m", help="Mode: compare, travel, trending"),  # noqa: B008
+):
+    """Compare weather across multiple locations."""
+    from .dashboard import display_dashboard
+
+    settings = ctx.obj["settings"]
+
+    if len(locations) < 2:
+        console.print(Text("Error: dashboard requires at least 2 locations", style="bright_red"))
+        console.print(Text('Example: wx dashboard "New York" "London" "Tokyo"', style="dim"))
+        return
+
+    display_dashboard(
+        locations,
+        mode=mode,
         offline=settings.offline,
         console=console,
     )
