@@ -50,10 +50,33 @@ class NotificationManager:
         self.rules_file = config_dir / "alert_rules.json"
         self.history_file = config_dir / "notification_history.json"
 
-        # Ensure directory exists
-        self.config_dir.mkdir(parents=True, exist_ok=True)
+        # SECURITY: Safe directory creation with validation (CWE-367)
+        self._safe_mkdir(self.config_dir)
 
         self.rules: list[AlertRule] = self._load_rules()
+
+    def _safe_mkdir(self, path: Path) -> None:
+        """Safely create directory with validation.
+
+        Args:
+            path: Directory path to create
+
+        Raises:
+            OSError: If directory creation fails or path is invalid
+        """
+        try:
+            path.mkdir(parents=True, exist_ok=True)
+
+            # SECURITY: Verify it's actually a directory (not a file or symlink)
+            if not path.is_dir():
+                raise OSError(f"{path} exists but is not a directory")
+
+            # SECURITY: Check it's not a symlink (prevents symlink attacks)
+            if path.is_symlink():
+                raise OSError(f"{path} is a symbolic link (security risk)")
+
+        except OSError as e:
+            raise OSError(f"Failed to create secure directory {path}: {e}") from e
 
     def _load_rules(self) -> list[AlertRule]:
         """Load alert rules from file."""
@@ -79,7 +102,7 @@ class NotificationManager:
             return []
 
     def _save_rules(self) -> bool:
-        """Save alert rules to file."""
+        """Save alert rules to file with atomic write and secure permissions."""
         try:
             rules_data = []
             for rule in self.rules:
@@ -88,25 +111,34 @@ class NotificationManager:
                     rule_dict["last_triggered"] = rule_dict["last_triggered"].isoformat()
                 rules_data.append(rule_dict)
 
-            # Atomic write
-            fd, temp_path = tempfile.mkstemp(
-                dir=self.config_dir, prefix=".rules_", suffix=".json"
-            )
+            # SECURITY: Set umask before creating temp file (CWE-367)
+            old_umask = os.umask(0o077)  # Ensure only user can read/write
 
             try:
-                with os.fdopen(fd, "w") as f:
-                    f.write(json.dumps(rules_data, indent=2))
+                # Atomic write with secure temp file
+                fd, temp_path = tempfile.mkstemp(
+                    dir=self.config_dir, prefix=".rules_", suffix=".json"
+                )
 
-                os.chmod(temp_path, 0o600)
-                os.replace(temp_path, self.rules_file)
-                return True
-
-            except Exception:
                 try:
-                    os.unlink(temp_path)
-                except OSError:
-                    pass
-                raise
+                    with os.fdopen(fd, "w") as f:
+                        f.write(json.dumps(rules_data, indent=2))
+
+                    # Extra safety: explicit chmod
+                    os.chmod(temp_path, 0o600)
+                    os.replace(temp_path, self.rules_file)
+                    return True
+
+                except Exception:
+                    try:
+                        os.unlink(temp_path)
+                    except OSError:
+                        pass
+                    raise
+
+            finally:
+                # Restore original umask
+                os.umask(old_umask)
 
         except OSError:
             return False

@@ -69,17 +69,26 @@ class WeatherDashboard:
         console.print(table)
         console.print()
 
-        # Temperature differences
+        # Temperature differences with defensive checks
         temps_numeric = []
         for loc in locations_data:
             try:
-                temps_numeric.append(float(loc.get("temperature", 0)))
+                temp = float(loc.get("temperature", 0))
+                if temp != 0:  # Only include non-zero values
+                    temps_numeric.append(temp)
             except (ValueError, TypeError):
-                temps_numeric.append(0)
+                pass  # Skip invalid values
 
-        if temps_numeric:
+        # BUGFIX: Check for valid temperature data before calculating range
+        if len(temps_numeric) >= 2:
             temp_diff = max(temps_numeric) - min(temps_numeric)
-            console.print(ds.info_row("Temperature Range:", f"{temp_diff:.1f}° difference"))
+            if temp_diff > 0:
+                console.print(ds.info_row("Temperature Range:", f"{temp_diff:.1f}° difference"))
+            else:
+                console.print(ds.info_row("Temperature Range:", "All locations have similar temperature"))
+            console.print()
+        elif len(temps_numeric) == 1:
+            console.print(ds.info_row("Temperature:", f"{temps_numeric[0]:.1f}°"))
             console.print()
 
     @staticmethod
@@ -250,12 +259,35 @@ def display_dashboard(
     if console is None:
         console = Console()
 
-    # Fetch data for each location
+    # PERFORMANCE: Fetch data concurrently for multiple locations
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
     locations_data = []
-    for location in locations:
-        # In production, fetch real data
-        data = create_sample_location_data(location, offline=offline)
-        locations_data.append(data)
+
+    with ThreadPoolExecutor(max_workers=min(5, len(locations))) as executor:
+        # Submit all fetch tasks
+        future_to_location = {
+            executor.submit(create_sample_location_data, loc, offline=offline): loc
+            for loc in locations
+        }
+
+        # Collect results as they complete
+        for future in as_completed(future_to_location):
+            location = future_to_location[future]
+            try:
+                data = future.result()
+                locations_data.append(data)
+            except Exception as e:
+                # Log error but continue with other locations
+                console.print(Text(f"Failed to fetch data for {location}: {e}", style="dim red"))
+
+    # Sort by original order (futures may complete out of order)
+    location_order = {loc: i for i, loc in enumerate(locations)}
+    locations_data.sort(key=lambda x: location_order.get(x.get("name", ""), 999))
+
+    if not locations_data:
+        console.print(Text("No weather data available", style="bright_red"))
+        return
 
     dashboard = WeatherDashboard()
 

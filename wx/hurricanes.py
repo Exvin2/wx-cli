@@ -78,19 +78,31 @@ class HurricaneTracker(BaseAPIClient):
         except (requests.RequestException, OSError):
             return None
 
-    def _generate_synthetic_storms(self) -> list[dict[str, Any]]:
+    def _generate_synthetic_storms(self, *, always_generate: bool = True) -> list[dict[str, Any]]:
         """Generate synthetic storm data for testing.
+
+        Args:
+            always_generate: If True, always generate storms (for offline/testing).
+                           If False, 30% probability (more realistic).
 
         Returns:
             List of synthetic storms
         """
         import random
+        from .constants import (
+            SYNTHETIC_STORM_PROBABILITY,
+            MIN_SYNTHETIC_STORMS,
+            MAX_SYNTHETIC_STORMS,
+        )
 
-        if random.random() < 0.3:  # 30% chance of active storms
-            num_storms = random.randint(1, 3)
+        # BUGFIX: For offline/testing mode, always generate storms so users can see data
+        should_generate = always_generate or (random.random() < SYNTHETIC_STORM_PROBABILITY)
+
+        if should_generate:
+            num_storms = random.randint(MIN_SYNTHETIC_STORMS, MAX_SYNTHETIC_STORMS)
             storms = []
 
-            names = ["Alberto", "Beryl", "Chris", "Debby", "Ernesto", "Francine"]
+            names = ["Alberto", "Beryl", "Chris", "Debby", "Ernesto", "Francine", "Gordon", "Helene"]
             basins = ["Atlantic", "Eastern Pacific", "Central Pacific"]
 
             for i in range(num_storms):

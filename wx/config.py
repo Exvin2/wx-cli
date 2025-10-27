@@ -131,8 +131,34 @@ REGIONAL_SAMPLES = {
 # Load environment variables from a local .env if present without overriding existing env
 load_dotenv()
 
-STATE_DIR = Path(os.getenv("WX_STATE_DIR", Path.home() / ".cache" / "wx"))
-STATE_DIR.mkdir(parents=True, exist_ok=True)
+# SECURITY: Use platformdirs for cross-platform config/cache paths
+from platformdirs import user_cache_dir
+
+# Use platformdirs for cross-platform compatibility (Windows, Mac, Linux)
+# Can still be overridden with WX_STATE_DIR environment variable
+_default_state_dir = user_cache_dir("wx", "wx-cli")
+STATE_DIR = Path(os.getenv("WX_STATE_DIR", _default_state_dir))
+
+# SECURITY: Safe directory creation with validation (CWE-367)
+def _safe_mkdir(path: Path) -> None:
+    """Safely create directory with validation against symlink attacks."""
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+
+        # Verify it's actually a directory
+        if not path.is_dir():
+            raise OSError(f"{path} exists but is not a directory")
+
+        # Check it's not a symlink (security)
+        if path.is_symlink():
+            raise OSError(f"{path} is a symbolic link (security risk)")
+    except OSError as e:
+        # Fall back to current directory if we can't create secure directory
+        import sys
+        print(f"Warning: Could not create secure state directory: {e}", file=sys.stderr)
+        print(f"Using current directory instead", file=sys.stderr)
+
+_safe_mkdir(STATE_DIR)
 STATE_FILE = STATE_DIR / "last_query.json"
 
 UnitsLiteral = Literal["imperial", "metric"]

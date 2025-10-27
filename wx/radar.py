@@ -461,23 +461,38 @@ def display_radar(
     station: str,
     *,
     animate: bool = False,
-    frames: int = 10,
-    delay: float = 0.5,
+    frames: int | None = None,
+    delay: float | None = None,
     gui: bool = False,
     offline: bool = False,
     console: Any = None,
+    max_loops: int | None = None,
 ) -> None:
     """Display live weather radar.
 
     Args:
         station: Radar station ID
         animate: Enable animation loop
-        frames: Number of frames for animation
-        delay: Delay between frames in seconds
+        frames: Number of frames for animation (default from constants)
+        delay: Delay between frames in seconds (default from constants)
         gui: Force GUI window display
         offline: Offline mode
         console: Rich console for output
+        max_loops: Maximum animation loops (default from constants, prevents infinite loop)
     """
+    from .constants import (
+        DEFAULT_RADAR_FRAMES,
+        DEFAULT_RADAR_DELAY,
+        MAX_RADAR_ANIMATION_LOOPS,
+    )
+
+    # Use constants as defaults
+    if frames is None:
+        frames = DEFAULT_RADAR_FRAMES
+    if delay is None:
+        delay = DEFAULT_RADAR_DELAY
+    if max_loops is None:
+        max_loops = MAX_RADAR_ANIMATION_LOOPS
     from rich.console import Console
     from rich.text import Text
 
@@ -527,14 +542,18 @@ def display_radar(
                 renderer.open_gui_window(frame, f"Radar {station.upper()}")
         elif graphics_mode == "unicode":
             # Animate with Unicode blocks
-            console.print(Text("Animating radar loop...", style="dim"))
+            console.print(Text(f"Animating radar loop (max {max_loops} loops, Ctrl+C to stop)...", style="dim"))
             console.print()
 
             try:
-                for _ in range(3):  # Loop 3 times
-                    for frame in frame_data:
+                for loop_num in range(max_loops):
+                    for i, frame in enumerate(frame_data):
                         # Clear screen
                         console.clear()
+
+                        # Show progress
+                        progress = Text(f"Loop {loop_num + 1}/{max_loops} | Frame {i + 1}/{len(frame_data)}", style="dim")
+                        console.print(progress)
 
                         # Render frame
                         radar_image = renderer.render_unicode_radar(frame, width=120, height=50)
@@ -543,9 +562,12 @@ def display_radar(
                         # Delay
                         time.sleep(delay)
 
+                console.print()
+                console.print(Text(f"Animation completed ({max_loops} loops)", style="bright_green"))
+
             except KeyboardInterrupt:
                 console.print()
-                console.print(Text("Animation stopped", style="bright_yellow"))
+                console.print(Text("Animation stopped by user", style="bright_yellow"))
 
         else:
             console.print(Text(f"Using {graphics_mode} graphics", style="dim"))
