@@ -53,11 +53,22 @@ def get_buoy_observations(
 
     Returns:
         Dictionary with buoy observations or None
+
+    Raises:
+        ValueError: If station ID is invalid
     """
+    from .security import validate_buoy_id, ValidationError
+
+    # SECURITY: Validate buoy station ID before URL construction
+    try:
+        station_id = validate_buoy_id(station_id)
+    except ValidationError as e:
+        raise ValueError(str(e)) from e
+
     if offline:
         return None
 
-    # Latest observation in real-time
+    # Latest observation in real-time (using validated station ID)
     url = f"https://www.ndbc.noaa.gov/data/realtime2/{station_id}.txt"
 
     try:

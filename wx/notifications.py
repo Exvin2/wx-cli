@@ -122,16 +122,38 @@ class NotificationManager:
 
         Args:
             name: Rule name
-            condition: Alert condition
+            condition: Alert condition (e.g., "temp < 32")
             location: Location to monitor
             notification_method: How to notify
 
         Returns:
             True if added successfully
+
+        Raises:
+            ValueError: If rule parameters are invalid
         """
+        from .security import validate_notification_condition, validate_location_input, ValidationError
+
+        # SECURITY: Validate all inputs before creating rule
+        try:
+            # Validate condition format and parse it
+            validate_notification_condition(condition)
+
+            # Validate location input
+            location = validate_location_input(location)
+
+            # Validate rule name
+            if len(name) > 50:
+                raise ValidationError("Rule name too long (max 50 characters)")
+            if not name.strip():
+                raise ValidationError("Rule name cannot be empty")
+
+        except ValidationError as e:
+            raise ValueError(str(e)) from e
+
         rule = AlertRule(
-            name=name,
-            condition=condition,
+            name=name.strip(),
+            condition=condition.strip(),
             location=location,
             notification_method=notification_method,
         )
@@ -208,50 +230,52 @@ class NotificationManager:
         return notifications
 
     def _evaluate_condition(self, condition: str, data: dict[str, Any]) -> bool:
-        """Evaluate alert condition against data.
+        """Evaluate alert condition against data with security validation.
 
         Args:
-            condition: Condition string
+            condition: Condition string (e.g., "temp < 32")
             data: Weather data
 
         Returns:
-            True if condition is met
+            True if condition is met, False otherwise
         """
-        # Simple condition parser
-        # Format: "variable operator value"
-        # Examples: "temp < 32", "wind > 50", "aqi > 150"
+        from .security import validate_notification_condition, ValidationError
 
+        # SECURITY: Use validated condition parser
         try:
-            parts = condition.split()
-            if len(parts) != 3:
-                return False
+            parsed = validate_notification_condition(condition)
+        except ValidationError:
+            # Invalid condition format - fail safely
+            return False
 
-            variable, operator, threshold = parts
-            threshold = float(threshold)
+        variable = parsed['variable']
+        operator = parsed['operator']
+        threshold = parsed['threshold']
 
-            # Get value from data
-            value = data.get(variable)
-            if value is None:
-                return False
+        # Get value from data
+        value = data.get(variable)
+        if value is None:
+            return False
 
+        # Try to convert to float
+        try:
             value = float(value)
-
-            # Evaluate
-            if operator == "<":
-                return value < threshold
-            elif operator == "<=":
-                return value <= threshold
-            elif operator == ">":
-                return value > threshold
-            elif operator == ">=":
-                return value >= threshold
-            elif operator == "==":
-                return value == threshold
-            elif operator == "!=":
-                return value != threshold
-
         except (ValueError, TypeError):
             return False
+
+        # Evaluate with validated operator
+        if operator == "<":
+            return value < threshold
+        elif operator == "<=":
+            return value <= threshold
+        elif operator == ">":
+            return value > threshold
+        elif operator == ">=":
+            return value >= threshold
+        elif operator == "==":
+            return value == threshold
+        elif operator == "!=":
+            return value != threshold
 
         return False
 

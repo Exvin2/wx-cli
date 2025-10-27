@@ -209,13 +209,24 @@ class RadarFetcher:
             N0S: Storm Relative Velocity
             N0V: Base Velocity
             N0Z: Base Reflectivity (High Res)
+
+        Raises:
+            ValueError: If station ID is invalid
         """
+        from .security import validate_radar_station, ValidationError
+
+        # SECURITY: Validate station ID against whitelist before URL construction
+        try:
+            station_validated = validate_radar_station(station)
+        except ValidationError as e:
+            raise ValueError(str(e)) from e
+
         if offline:
             return None
 
         try:
-            # NWS Ridge radar image URL
-            url = f"https://radar.weather.gov/ridge/standard/{station}_loop.gif"
+            # Use validated station ID in URL construction
+            url = f"https://radar.weather.gov/ridge/standard/{station_validated}_loop.gif"
 
             response = self.session.get(url, timeout=self.timeout)
             response.raise_for_status()
@@ -473,11 +484,20 @@ def display_radar(
     if console is None:
         console = Console()
 
+    from .security import validate_radar_station, ValidationError
+
+    # SECURITY: Validate station ID before processing
+    try:
+        station = validate_radar_station(station)
+    except ValidationError as e:
+        console.print(Text(f"Error: {e}", style="bright_red"))
+        return
+
     fetcher = RadarFetcher()
     renderer = RadarRenderer()
 
-    # Get station info
-    station_name = fetcher.RADAR_STATIONS.get(station.upper(), "Unknown")
+    # Get station info (station is already uppercase from validation)
+    station_name = fetcher.RADAR_STATIONS.get(station, "Unknown")
 
     console.print()
     console.print(Text(f"Weather Radar: {station.upper()} - {station_name}", style="bold bright_blue"))

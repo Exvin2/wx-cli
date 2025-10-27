@@ -21,11 +21,22 @@ def get_metar(
 
     Returns:
         Dictionary with METAR data or None
+
+    Raises:
+        ValueError: If station ID is invalid
     """
+    from .security import validate_icao_station, ValidationError
+
+    # SECURITY: Validate ICAO station ID before URL construction
+    try:
+        station_id = validate_icao_station(station_id)
+    except ValidationError as e:
+        raise ValueError(str(e)) from e
+
     if offline:
         return None
 
-    # NOAA Aviation Weather Center
+    # NOAA Aviation Weather Center (using validated station ID)
     url = f"https://aviationweather.gov/cgi-bin/data/metar.php?ids={station_id}&format=json"
 
     try:
@@ -74,11 +85,22 @@ def get_taf(
 
     Returns:
         Dictionary with TAF data or None
+
+    Raises:
+        ValueError: If station ID is invalid
     """
+    from .security import validate_icao_station, ValidationError
+
+    # SECURITY: Validate ICAO station ID before URL construction
+    try:
+        station_id = validate_icao_station(station_id)
+    except ValidationError as e:
+        raise ValueError(str(e)) from e
+
     if offline:
         return None
 
-    # NOAA Aviation Weather Center
+    # NOAA Aviation Weather Center (using validated station ID)
     url = f"https://aviationweather.gov/cgi-bin/data/taf.php?ids={station_id}&format=json"
 
     try:

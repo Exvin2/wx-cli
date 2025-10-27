@@ -474,12 +474,33 @@ def fetch_eu_alerts(
 def get_nws_forecast_grid(
     lat: float, lon: float, *, offline: bool = False, timeout: float = DEFAULT_TIMEOUT
 ) -> dict[str, Any] | None:
-    """Fetch NWS gridded forecast data for a location."""
+    """Fetch NWS gridded forecast data for a location.
+
+    Args:
+        lat: Latitude
+        lon: Longitude
+        offline: Offline mode
+        timeout: Request timeout
+
+    Returns:
+        Dictionary with grid_id, grid_x, grid_y, and periods list
+
+    Raises:
+        ValueError: If coordinates are invalid
+    """
+    from .security import validate_coordinates, ValidationError
+
+    # SECURITY: Validate coordinates before URL construction
+    try:
+        lat, lon = validate_coordinates(lat, lon)
+    except ValidationError as e:
+        raise ValueError(str(e)) from e
+
     if offline:
         return None
 
     # First, get the grid point metadata
-    points_url = f"https://api.weather.gov/points/{lat:.4f},{lon:.4f}"
+    points_url = f"https://api.weather.gov/points/{lat},{lon}"
     try:
         with _create_client(timeout) as client:
             response = client.get(points_url)
@@ -525,12 +546,33 @@ def get_nws_forecast_grid(
 def get_nws_observation_stations(
     lat: float, lon: float, *, offline: bool = False, timeout: float = DEFAULT_TIMEOUT
 ) -> list[dict[str, Any]]:
-    """Fetch nearby NWS observation stations for a location."""
+    """Fetch nearby NWS observation stations for a location.
+
+    Args:
+        lat: Latitude
+        lon: Longitude
+        offline: Offline mode
+        timeout: Request timeout
+
+    Returns:
+        List of station dictionaries
+
+    Raises:
+        ValueError: If coordinates are invalid
+    """
+    from .security import validate_coordinates, ValidationError
+
+    # SECURITY: Validate coordinates before URL construction
+    try:
+        lat, lon = validate_coordinates(lat, lon)
+    except ValidationError as e:
+        raise ValueError(str(e)) from e
+
     if offline:
         return []
 
     # Get stations near the point
-    url = f"https://api.weather.gov/points/{lat:.4f},{lon:.4f}/stations"
+    url = f"https://api.weather.gov/points/{lat},{lon}/stations"
     try:
         with _create_client(timeout) as client:
             response = client.get(url)
@@ -599,12 +641,33 @@ def get_nws_latest_observation(
 def get_nws_hourly_forecast(
     lat: float, lon: float, *, offline: bool = False, timeout: float = DEFAULT_TIMEOUT
 ) -> list[dict[str, Any]]:
-    """Fetch NWS hourly forecast for a location."""
+    """Fetch NWS hourly forecast for a location.
+
+    Args:
+        lat: Latitude
+        lon: Longitude
+        offline: Offline mode
+        timeout: Request timeout
+
+    Returns:
+        List of hourly forecast periods
+
+    Raises:
+        ValueError: If coordinates are invalid
+    """
+    from .security import validate_coordinates, ValidationError
+
+    # SECURITY: Validate coordinates before URL construction
+    try:
+        lat, lon = validate_coordinates(lat, lon)
+    except ValidationError as e:
+        raise ValueError(str(e)) from e
+
     if offline:
         return []
 
     # Get the grid point first
-    points_url = f"https://api.weather.gov/points/{lat:.4f},{lon:.4f}"
+    points_url = f"https://api.weather.gov/points/{lat},{lon}"
     try:
         with _create_client(timeout) as client:
             response = client.get(points_url)
