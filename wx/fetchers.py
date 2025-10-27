@@ -355,7 +355,8 @@ def fetch_eu_alerts(
     if offline:
         return []
 
-    import xml.etree.ElementTree as ET
+    # SECURITY: Use defusedxml to prevent XXE attacks (CWE-611)
+    from defusedxml import ElementTree as ET
 
     # MeteoAlarm consolidated feed
     url = "https://meteoalarm.org/documents/rss/wflag-rss-all.xml"
@@ -368,7 +369,7 @@ def fetch_eu_alerts(
     except (httpx.HTTPError, ValueError):
         return []
 
-    # Parse XML
+    # Parse XML safely with defusedxml
     try:
         root = ET.fromstring(xml_content)
     except ET.ParseError:

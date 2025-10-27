@@ -5,12 +5,14 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-import requests
 from rich.console import Console
 from rich.text import Text
 
+from .base_client import BaseAPIClient
+from .constants import HURRICANE_TIMEOUT
 
-class HurricaneTracker:
+
+class HurricaneTracker(BaseAPIClient):
     """Track hurricanes and tropical storms from NOAA NHC."""
 
     # National Hurricane Center (NHC)
@@ -18,17 +20,16 @@ class HurricaneTracker:
     ACTIVE_STORMS_JSON = f"{NHC_BASE_URL}/CurrentStorms.json"
     GIS_URL = f"{NHC_BASE_URL}/gis"
 
-    def __init__(self, timeout: int = 10):
+    def __init__(self, timeout: int = HURRICANE_TIMEOUT):
         """Initialize hurricane tracker.
 
         Args:
             timeout: Request timeout
         """
-        self.timeout = timeout
-        self.session = requests.Session()
-        self.session.headers.update({
-            "User-Agent": "wx-cli/1.0 (Weather CLI Tool)",
-        })
+        super().__init__(
+            timeout=timeout,
+            rate_limiter_name="nhc"
+        )
 
     def get_active_storms(self, *, offline: bool = False) -> list[dict[str, Any]]:
         """Get currently active tropical systems.

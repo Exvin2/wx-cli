@@ -4,24 +4,27 @@ from __future__ import annotations
 
 from typing import Any
 
-import requests
+from .base_client import BaseAPIClient
+from .constants import INTERNATIONAL_TIMEOUT
 
 
-class MetOfficeAPI:
+class MetOfficeAPI(BaseAPIClient):
     """UK Met Office DataPoint API integration."""
 
     BASE_URL = "http://datapoint.metoffice.gov.uk/public/data"
 
-    def __init__(self, api_key: str | None = None, timeout: int = 10):
+    def __init__(self, api_key: str | None = None, timeout: int = INTERNATIONAL_TIMEOUT):
         """Initialize Met Office API client.
 
         Args:
             api_key: Met Office DataPoint API key
             timeout: Request timeout in seconds
         """
+        super().__init__(
+            timeout=timeout,
+            rate_limiter_name="metoffice"
+        )
         self.api_key = api_key
-        self.timeout = timeout
-        self.session = requests.Session()
 
     def get_forecast(
         self, location_id: str, *, offline: bool = False
@@ -38,17 +41,11 @@ class MetOfficeAPI:
         if offline or not self.api_key:
             return None
 
-        try:
-            url = f"{self.BASE_URL}/val/wxfcs/all/json/{location_id}"
-            params = {"res": "3hourly", "key": self.api_key}
+        url = f"{self.BASE_URL}/val/wxfcs/all/json/{location_id}"
+        params = {"res": "3hourly", "key": self.api_key}
 
-            response = self.session.get(url, params=params, timeout=self.timeout)
-            response.raise_for_status()
-
-            return response.json()
-
-        except (requests.RequestException, OSError):
-            return None
+        # Use parent class method with automatic size limits and rate limiting
+        return self._get_json(url, params=params, offline=offline)
 
     def get_observations(
         self, location_id: str, *, offline: bool = False
@@ -65,17 +62,11 @@ class MetOfficeAPI:
         if offline or not self.api_key:
             return None
 
-        try:
-            url = f"{self.BASE_URL}/val/wxobs/all/json/{location_id}"
-            params = {"res": "hourly", "key": self.api_key}
+        url = f"{self.BASE_URL}/val/wxobs/all/json/{location_id}"
+        params = {"res": "hourly", "key": self.api_key}
 
-            response = self.session.get(url, params=params, timeout=self.timeout)
-            response.raise_for_status()
-
-            return response.json()
-
-        except (requests.RequestException, OSError):
-            return None
+        # Use parent class method with automatic size limits and rate limiting
+        return self._get_json(url, params=params, offline=offline)
 
     def search_location(
         self, query: str, *, offline: bool = False
@@ -92,45 +83,50 @@ class MetOfficeAPI:
         if offline or not self.api_key:
             return []
 
-        try:
-            url = f"{self.BASE_URL}/val/wxfcs/all/json/sitelist"
-            params = {"key": self.api_key}
+        url = f"{self.BASE_URL}/val/wxfcs/all/json/sitelist"
+        params = {"key": self.api_key}
 
-            response = self.session.get(url, params=params, timeout=self.timeout)
-            response.raise_for_status()
+        # Use parent class method
+        data = self._get_json(url, params=params, offline=offline)
 
-            data = response.json()
-
-            # Filter locations by query
-            locations = data.get("Locations", {}).get("Location", [])
-            query_lower = query.lower()
-
-            matches = [
-                loc
-                for loc in locations
-                if query_lower in loc.get("name", "").lower()
-            ]
-
-            return matches[:10]  # Return top 10 matches
-
-        except (requests.RequestException, OSError):
+        if not data:
             return []
 
+        # Filter locations by query with type validation
+        from .security import safe_get_dict
 
-class EnvironmentCanadaAPI:
+        locations_obj = safe_get_dict(data, "Locations", {}, dict)
+        locations = safe_get_dict(locations_obj, "Location", [], list)
+
+        if not isinstance(locations, list):
+            return []
+
+        query_lower = query.lower()
+        matches = [
+            loc
+            for loc in locations
+            if isinstance(loc, dict) and query_lower in loc.get("name", "").lower()
+        ]
+
+        return matches[:10]  # Return top 10 matches
+
+
+class EnvironmentCanadaAPI(BaseAPIClient):
     """Environment Canada weather data integration."""
 
     BASE_URL = "https://dd.weather.gc.ca"
     CITY_XML_URL = "https://weather.gc.ca/rss/city"
 
-    def __init__(self, timeout: int = 10):
+    def __init__(self, timeout: int = INTERNATIONAL_TIMEOUT):
         """Initialize Environment Canada API client.
 
         Args:
             timeout: Request timeout in seconds
         """
-        self.timeout = timeout
-        self.session = requests.Session()
+        super().__init__(
+            timeout=timeout,
+            rate_limiter_name="environment_canada"
+        )
 
     def get_forecast(
         self, province: str, city_code: str, *, offline: bool = False

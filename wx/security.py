@@ -297,22 +297,172 @@ def validate_condition_simple(condition: str) -> bool:
 
 def sanitize_string_for_logging(value: str, max_length: int = 50) -> str:
     """Sanitize string for safe logging (remove control chars, truncate).
-    
+
     Args:
         value: String to sanitize
         max_length: Maximum length
-        
+
     Returns:
         Sanitized string safe for logging
     """
     if not value:
         return ""
-    
+
     # Remove control characters
     sanitized = ''.join(c if ord(c) >= 32 else '?' for c in value)
-    
+
     # Truncate
     if len(sanitized) > max_length:
         sanitized = sanitized[:max_length] + "..."
-    
+
     return sanitized
+
+
+def redact_api_key(key: str | None) -> str:
+    """Redact API key for safe logging and error messages.
+
+    Shows only first and last 4 characters to help with debugging
+    while protecting the actual key value.
+
+    Args:
+        key: API key to redact
+
+    Returns:
+        Redacted string (e.g., "sk-1234...7890" or "***" for short keys)
+
+    Examples:
+        >>> redact_api_key("sk-1234567890abcdef")
+        'sk-1...cdef'
+        >>> redact_api_key("short")
+        '***'
+        >>> redact_api_key(None)
+        '[None]'
+    """
+    if key is None:
+        return "[None]"
+
+    if not isinstance(key, str):
+        return "[Invalid type]"
+
+    # For very short keys (<=8 chars), completely redact
+    if len(key) <= 8:
+        return "***"
+
+    # Show first 4 and last 4 characters
+    return f"{key[:4]}...{key[-4:]}"
+
+
+def validate_json_dict(data: Any, field_name: str = "data") -> dict[str, Any]:
+    """Validate that data is a dictionary.
+
+    Args:
+        data: Data to validate
+        field_name: Name of field for error messages
+
+    Returns:
+        The data if it's a valid dict
+
+    Raises:
+        ValidationError: If data is not a dict
+    """
+    if not isinstance(data, dict):
+        raise ValidationError(
+            f"Expected {field_name} to be a JSON object (dict), "
+            f"got {type(data).__name__}"
+        )
+    return data
+
+
+def validate_json_list(data: Any, field_name: str = "data") -> list[Any]:
+    """Validate that data is a list.
+
+    Args:
+        data: Data to validate
+        field_name: Name of field for error messages
+
+    Returns:
+        The data if it's a valid list
+
+    Raises:
+        ValidationError: If data is not a list
+    """
+    if not isinstance(data, list):
+        raise ValidationError(
+            f"Expected {field_name} to be a JSON array (list), "
+            f"got {type(data).__name__}"
+        )
+    return data
+
+
+def validate_json_string(data: Any, field_name: str = "data") -> str:
+    """Validate that data is a string.
+
+    Args:
+        data: Data to validate
+        field_name: Name of field for error messages
+
+    Returns:
+        The data if it's a valid string
+
+    Raises:
+        ValidationError: If data is not a string
+    """
+    if not isinstance(data, str):
+        raise ValidationError(
+            f"Expected {field_name} to be a string, "
+            f"got {type(data).__name__}"
+        )
+    return data
+
+
+def validate_json_number(data: Any, field_name: str = "data") -> int | float:
+    """Validate that data is a number.
+
+    Args:
+        data: Data to validate
+        field_name: Name of field for error messages
+
+    Returns:
+        The data if it's a valid number
+
+    Raises:
+        ValidationError: If data is not a number
+    """
+    if not isinstance(data, (int, float)):
+        raise ValidationError(
+            f"Expected {field_name} to be a number, "
+            f"got {type(data).__name__}"
+        )
+    return data
+
+
+def safe_get_dict(
+    data: dict[str, Any],
+    key: str,
+    default: Any = None,
+    expected_type: type | None = None
+) -> Any:
+    """Safely get value from dict with type checking.
+
+    Args:
+        data: Dictionary to get value from
+        key: Key to retrieve
+        default: Default value if key not found or wrong type
+        expected_type: Expected type of value (None to skip type check)
+
+    Returns:
+        Value from dict or default
+
+    Example:
+        >>> safe_get_dict({"temp": 72}, "temp", 0, int)
+        72
+        >>> safe_get_dict({"temp": "hot"}, "temp", 0, int)
+        0  # Returns default because type mismatch
+    """
+    value = data.get(key, default)
+
+    if expected_type is not None and value is not None:
+        if not isinstance(value, expected_type):
+            return default
+
+    return value

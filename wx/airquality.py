@@ -4,12 +4,14 @@ from __future__ import annotations
 
 from typing import Any
 
-import requests
 from rich.console import Console
 from rich.text import Text
 
+from .base_client import BaseAPIClient
+from .constants import AQI_TIMEOUT, DEFAULT_AQI_SEARCH_RADIUS_MILES
 
-class AirQualityFetcher:
+
+class AirQualityFetcher(BaseAPIClient):
     """Fetch air quality data from various sources."""
 
     # EPA AirNow API
@@ -18,16 +20,18 @@ class AirQualityFetcher:
     # UK DEFRA (Department for Environment, Food & Rural Affairs)
     UK_AIR_BASE_URL = "https://uk-air.defra.gov.uk/assets/rss"
 
-    def __init__(self, api_key: str | None = None, timeout: int = 10):
+    def __init__(self, api_key: str | None = None, timeout: int = AQI_TIMEOUT):
         """Initialize air quality fetcher.
 
         Args:
             api_key: AirNow API key
             timeout: Request timeout
         """
+        super().__init__(
+            timeout=timeout,
+            rate_limiter_name="airnow"
+        )
         self.api_key = api_key
-        self.timeout = timeout
-        self.session = requests.Session()
 
     def get_us_aqi(
         self, lat: float, lon: float, *, offline: bool = False
@@ -45,23 +49,19 @@ class AirQualityFetcher:
         if offline or not self.api_key:
             return self._generate_synthetic_aqi("US")
 
-        try:
-            url = f"{self.AIRNOW_BASE_URL}/observation/latLong/current"
-            params = {
-                "latitude": lat,
-                "longitude": lon,
-                "distance": 25,  # miles
-                "API_KEY": self.api_key,
-                "format": "application/json",
-            }
+        url = f"{self.AIRNOW_BASE_URL}/observation/latLong/current"
+        params = {
+            "latitude": lat,
+            "longitude": lon,
+            "distance": DEFAULT_AQI_SEARCH_RADIUS_MILES,
+            "API_KEY": self.api_key,
+            "format": "application/json",
+        }
 
-            response = self.session.get(url, params=params, timeout=self.timeout)
-            response.raise_for_status()
+        # Use parent class method with automatic size limits and rate limiting
+        data = self._get_json(url, params=params, offline=False, validate_dict=False)
 
-            return response.json()
-
-        except (requests.RequestException, OSError):
-            return self._generate_synthetic_aqi("US")
+        return data if data is not None else self._generate_synthetic_aqi("US")
 
     def get_uk_aqi(
         self, location: str, *, offline: bool = False
