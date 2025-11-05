@@ -75,10 +75,10 @@ wx-cli uses the **free and open** NWS API at `api.weather.gov`:
 
 **Current implementation**: wx-cli automatically sets the User-Agent header to:
 ```
-wx-cli/0.1 (+https://github.com/Exvin2/claudex-cli; contact@example.com)
+wx-cli/0.1 (+https://github.com/Exvin2/wx-cli; contact: okayyuio@gmail.com)
 ```
 
-To customize with your contact email, set `NWS_CONTACT_EMAIL` in your `.env` file.
+To customize with your contact email, set `NWS_CONTACT_EMAIL=okayyuio@gmail.com` in your `.env` file.
 
 **Note**: Don't confuse with NOAA's Climate Data Online (CDO) API, which is a different service that does require API tokens.
 

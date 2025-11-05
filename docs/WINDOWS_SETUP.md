@@ -204,7 +204,7 @@ AI_TEMPERATURE=0.2
 AI_MAX_TOKENS=900
 
 # NWS API (free, no key needed - uses User-Agent header)
-NWS_CONTACT_EMAIL=your@email.com   # Optional: for NWS User-Agent identification
+NWS_CONTACT_EMAIL=okayyuio@gmail.com   # Optional: for NWS User-Agent identification
 
 # Windows-specific
 WX_STATE_DIR=%USERPROFILE%\.cache\wx
