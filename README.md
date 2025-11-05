@@ -60,9 +60,27 @@ Set environment variables directly or via `.env` to tune behaviour:
 | `UNITS` | `imperial` or `metric` | `imperial` |
 | `PRIVACY_MODE` | `1` keeps history off disk; set `0` to enable `wx explain` | `1` |
 | `WX_OFFLINE` | `1` skips all network fetchers | `0` |
-| `NWS_API_KEY` | Reserved for future National Weather Service integrations | – |
+| `NWS_CONTACT_EMAIL` | Optional contact email for NWS API User-Agent header (NWS is free, no API key needed) | – |
+| `WX_NOTIFICATIONS` | `1` enables Windows desktop notifications (requires `pip install -e .[windows]`) | `0` |
 
 Use CLI flags `--offline` and `--trust-tools` to temporarily override environment defaults.
+
+### About NWS API (National Weather Service)
+
+wx-cli uses the **free and open** NWS API at `api.weather.gov`:
+- ✅ **No API key required** (completely free and open data)
+- ✅ **No rate limiting** for reasonable use
+- ✅ **User-Agent header** required (includes app name and optional contact email)
+- ℹ️ **Future plans**: NWS may implement API keys in the future (no timeline announced)
+
+**Current implementation**: wx-cli automatically sets the User-Agent header to:
+```
+wx-cli/0.1 (+https://github.com/Exvin2/claudex-cli; contact@example.com)
+```
+
+To customize with your contact email, set `NWS_CONTACT_EMAIL` in your `.env` file.
+
+**Note**: Don't confuse with NOAA's Climate Data Online (CDO) API, which is a different service that does require API tokens.
 
 ## Usage
 

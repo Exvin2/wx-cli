@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import os
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
@@ -11,7 +12,23 @@ from typing import Any
 import httpx
 
 DEFAULT_TIMEOUT = 3.0
-USER_AGENT = "wx-cli/0.1 (+https://github.com/Exvin2/claudex-cli)"
+
+
+def _get_user_agent() -> str:
+    """Build User-Agent header for NWS API requests.
+
+    NWS API requires User-Agent header with app identification.
+    Optionally includes contact email if NWS_CONTACT_EMAIL is set.
+    """
+    base_ua = "wx-cli/0.1 (+https://github.com/Exvin2/wx-cli)"
+    contact_email = os.getenv("NWS_CONTACT_EMAIL", "").strip()
+
+    if contact_email:
+        return f"{base_ua}; contact: {contact_email}"
+    return base_ua
+
+
+USER_AGENT = _get_user_agent()
 
 
 @dataclass(slots=True)
