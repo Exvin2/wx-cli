@@ -26,6 +26,7 @@ from .fetchers import (
     get_quick_profile,
 )
 from .forecaster import Forecaster, ForecasterResponse
+from .storyteller import Storyteller, WeatherStory
 
 
 @dataclass(slots=True)
@@ -50,6 +51,16 @@ class ExplainResult:
     text: str
     meta: dict[str, Any]
     response: ForecasterResponse
+    feature_pack: dict[str, Any]
+
+
+@dataclass(slots=True)
+class StoryResult:
+    """Result of a story generation."""
+
+    story: WeatherStory
+    timings: dict[str, float]
+    debug: dict[str, Any]
     feature_pack: dict[str, Any]
 
 
@@ -95,6 +106,7 @@ class Orchestrator:
         self.settings = settings
         self.trust_tools = trust_tools
         self.forecaster = Forecaster(settings)
+        self.storyteller = Storyteller(settings)
 
     def handle_question(self, question: str, *, verbose: bool) -> OrchestrationResult:
         feature_pack = self._base_feature_pack()
@@ -358,6 +370,122 @@ class Orchestrator:
             text=text,
             meta=meta,
             response=response,
+            feature_pack=feature_pack,
+        )
+
+    def handle_story(
+        self,
+        place: str,
+        *,
+        when_text: str | None = None,
+        horizon: str = "12h",
+        focus: str | None = None,
+        verbose: bool = False,
+    ) -> StoryResult:
+        """Generate a narrative weather story for a location.
+
+        Args:
+            place: Location name or coordinates
+            when_text: Optional time reference (e.g., "tomorrow", "tonight")
+            horizon: Time span to cover (default: "12h")
+            focus: Optional focus area (e.g., "commuting", "outdoor activities")
+            verbose: Allow longer, more detailed stories
+
+        Returns:
+            StoryResult with the generated weather narrative
+        """
+        timings: dict[str, float] = {}
+        debug_info: dict[str, Any] = {"fetchers": []}
+
+        # Build feature pack with location context
+        feature_pack = self._base_feature_pack()
+        place_info = self._maybe_fetch(
+            "point_context",
+            lambda: get_point_context(place, offline=self.settings.offline),
+            timings,
+            debug_info,
+        )
+        if place_info:
+            feature_pack["place"] = place_info
+
+        # Build time window
+        window = self._build_window(place_info, when_text, horizon)
+        if window:
+            feature_pack["window"] = window
+
+        # Fetch comprehensive weather data if trust_tools enabled
+        if place_info and self.trust_tools:
+            lat = place_info.get("lat")
+            lon = place_info.get("lon")
+            if isinstance(lat, (int, float)) and isinstance(lon, (int, float)):
+                # Fetch observations, forecast, and alerts
+                obs = self._maybe_fetch(
+                    "quick_obs",
+                    lambda: get_quick_obs(lat, lon, offline=self.settings.offline),
+                    timings,
+                    debug_info,
+                )
+                if obs:
+                    feature_pack["obs_quick"] = obs
+
+                profile = self._maybe_fetch(
+                    "quick_profile",
+                    lambda: get_quick_profile(lat, lon, offline=self.settings.offline),
+                    timings,
+                    debug_info,
+                )
+                if profile:
+                    feature_pack["profile_quick"] = profile
+
+                alerts = self._maybe_fetch(
+                    "quick_alerts",
+                    lambda: get_quick_alerts(lat, lon, offline=self.settings.offline),
+                    timings,
+                    debug_info,
+                )
+                if alerts:
+                    feature_pack["alerts_quick"] = alerts
+
+        # Build user query
+        query_parts = [f"Weather story for {place}"]
+        if when_text:
+            query_parts.append(f"starting {when_text}")
+        if focus:
+            query_parts.append(f"focused on {focus}")
+        user_query = " ".join(query_parts)
+
+        # Determine time horizon in human-readable form
+        horizon_map = {
+            "6h": "next 6 hours",
+            "12h": "next 12 hours",
+            "24h": "today",
+            "3d": "next 3 days",
+        }
+        time_horizon = horizon_map.get(horizon.lower(), "next 12 hours")
+
+        # Generate the story
+        start_time = time.perf_counter()
+        story = self.storyteller.generate_story(
+            location=place,
+            query=user_query,
+            feature_pack=feature_pack,
+            time_horizon=time_horizon,
+            current_time=window.get("start_local") if window else None,
+            verbose=verbose,
+        )
+        timings["story_generation"] = time.perf_counter() - start_time
+
+        # Persist state for explain mode
+        self._persist_state(
+            command="story",
+            query=user_query,
+            feature_pack=feature_pack,
+        )
+
+        return StoryResult(
+            story=story,
+            timings=timings,
+            debug=debug_info,
             feature_pack=feature_pack,
         )
 

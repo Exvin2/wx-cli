@@ -316,3 +316,229 @@ def _is_severe_alert(event: str) -> bool:
     severe_keywords = ["tornado", "flood", "severe thunderstorm", "tor-", "tor pds", "pds"]
     event_lower = event.lower()
     return any(kw in event_lower for kw in severe_keywords)
+
+
+def render_story(story, *, console: Console, json_mode: bool = False, verbose: bool = False) -> None:
+    """Render a weather story with rich formatting.
+
+    Args:
+        story: WeatherStory object from storyteller module
+        console: Rich Console instance
+        json_mode: Output as JSON instead of formatted text
+        verbose: Include extended metadata and details
+    """
+    if json_mode:
+        console.print(json.dumps(story.to_dict(), indent=2, ensure_ascii=True))
+        return
+
+    # Title with location if available
+    location = story.meta.get("location", "Weather Story")
+    title_text = Text(f"📖  {location}", style="bold cyan")
+    console.print(title_text)
+    console.print()
+
+    # THE SETUP section
+    setup_panel = Panel(
+        story.setup,
+        title="[bold]🌤️  THE SETUP[/bold] [dim](What's Happening)[/dim]",
+        border_style="blue",
+        expand=False,
+    )
+    console.print(setup_panel)
+
+    # THE PRESENT section
+    current_panel = Panel(
+        story.current,
+        title="[bold]🌡️  THE PRESENT[/bold]",
+        border_style="cyan",
+        expand=False,
+    )
+    console.print(current_panel)
+
+    # THE EVOLUTION section (timeline)
+    if story.evolution.phases:
+        timeline_content = _build_story_timeline(story.evolution)
+        evolution_panel = Panel(
+            timeline_content,
+            title="[bold]⏳  THE EVOLUTION[/bold] [dim](Your Next Hours)[/dim]",
+            border_style="yellow",
+            expand=False,
+        )
+        console.print(evolution_panel)
+
+    # THE METEOROLOGY section
+    meteorology_panel = Panel(
+        story.meteorology,
+        title="[bold]🌀  THE METEOROLOGY[/bold] [dim](Why This Matters)[/dim]",
+        border_style="magenta",
+        expand=False,
+    )
+    console.print(meteorology_panel)
+
+    # YOUR DECISIONS section
+    if story.decisions:
+        decisions_content = _build_story_decisions(story.decisions)
+        decisions_panel = Panel(
+            decisions_content,
+            title="[bold]🎯  YOUR DECISIONS[/bold] [dim](What To Do)[/dim]",
+            border_style="green",
+            expand=False,
+        )
+        console.print(decisions_panel)
+
+    # CONFIDENCE NOTES section
+    confidence_content = _build_story_confidence(story.confidence)
+    confidence_panel = Panel(
+        confidence_content,
+        title="[bold]📊  CONFIDENCE NOTES[/bold]",
+        border_style="white",
+        expand=False,
+    )
+    console.print(confidence_panel)
+
+    # Bottom line
+    console.print()
+    bottom_line_text = Text(f"💡 {story.bottom_line}", style="bold yellow")
+    console.print(bottom_line_text)
+
+    # Verbose metadata
+    if verbose:
+        meta_lines = [
+            f"Provider: {story.meta.get('provider', 'unknown')}",
+            f"Used fields: {', '.join(story.meta.get('used_fields', []))}",
+        ]
+        console.print(f"\n[dim]{' | '.join(meta_lines)}[/dim]")
+
+
+def _build_story_timeline(timeline) -> str:
+    """Build timeline visualization with phases."""
+    if not timeline.phases:
+        return "No timeline available."
+
+    lines = []
+    for i, phase in enumerate(timeline.phases):
+        prefix = "├─" if i < len(timeline.phases) - 1 else "└─"
+        time_range = f"{phase.start_time}–{phase.end_time}"
+
+        # Phase description
+        lines.append(f"{prefix} [bold]{time_range}[/bold]: {phase.description}")
+
+        # Key changes if present
+        if phase.key_changes:
+            for change in phase.key_changes:
+                indent = "│  " if i < len(timeline.phases) - 1 else "   "
+                lines.append(f"{indent}  • {change}")
+
+        # Confidence indicator
+        conf_bars = _confidence_bars(phase.confidence)
+        if i < len(timeline.phases) - 1:
+            lines.append(f"│  [dim]Confidence: {conf_bars}[/dim]")
+        else:
+            lines.append(f"   [dim]Confidence: {conf_bars}[/dim]")
+
+        # Blank line between phases except the last
+        if i < len(timeline.phases) - 1:
+            lines.append("│")
+
+    return "\n".join(lines)
+
+
+def _build_story_decisions(decisions: list) -> str:
+    """Format decision recommendations."""
+    if not decisions:
+        return "No specific recommendations available."
+
+    lines = []
+    for i, decision in enumerate(decisions, 1):
+        # Activity with emoji
+        emoji = _get_activity_emoji(decision.activity)
+        lines.append(f"{emoji}  [bold]{decision.activity}[/bold]")
+
+        # Recommendation
+        lines.append(f"   → {decision.recommendation}")
+
+        # Reasoning
+        lines.append(f"   [dim]Why: {decision.reasoning}[/dim]")
+
+        # Timing if specified
+        if decision.timing:
+            lines.append(f"   [dim]Best timing: {decision.timing}[/dim]")
+
+        # Confidence
+        conf_bars = _confidence_bars(decision.confidence)
+        lines.append(f"   [dim]Confidence: {conf_bars}[/dim]")
+
+        # Blank line between decisions
+        if i < len(decisions):
+            lines.append("")
+
+    return "\n".join(lines)
+
+
+def _build_story_confidence(confidence) -> str:
+    """Format confidence notes."""
+    lines = []
+
+    # Primary uncertainty
+    lines.append(f"[yellow]⚠️  Primary uncertainty:[/yellow] {confidence.primary_uncertainty}")
+
+    # Alternative scenarios
+    if confidence.alternative_scenarios:
+        lines.append("")
+        lines.append("[cyan]Alternative scenarios:[/cyan]")
+        for scenario in confidence.alternative_scenarios:
+            lines.append(f"  • {scenario}")
+
+    # Overall confidence level
+    lines.append("")
+    level_color = {
+        "High": "green",
+        "Medium": "yellow",
+        "Low": "red",
+    }.get(confidence.confidence_level, "white")
+
+    lines.append(
+        f"[{level_color}]Overall confidence: {confidence.confidence_level}[/{level_color}]"
+    )
+
+    # Rationale
+    if confidence.rationale:
+        lines.append(f"[dim]{confidence.rationale}[/dim]")
+
+    return "\n".join(lines)
+
+
+def _confidence_bars(confidence: float) -> str:
+    """Create visual confidence indicator."""
+    filled = int(confidence * 10)
+    empty = 10 - filled
+    return "█" * filled + "░" * empty
+
+
+def _get_activity_emoji(activity: str) -> str:
+    """Map activity types to emoji."""
+    activity_lower = activity.lower()
+
+    emoji_map = {
+        "commute": "🚗",
+        "bike": "🚴",
+        "run": "🏃",
+        "walk": "🚶",
+        "outdoor": "🌳",
+        "lunch": "☕",
+        "dinner": "🍽️",
+        "aviation": "✈️",
+        "sailing": "⛵",
+        "marine": "🌊",
+        "sports": "⚽",
+        "event": "📅",
+        "travel": "🧳",
+        "work": "💼",
+        "school": "🎒",
+    }
+
+    for key, emoji in emoji_map.items():
+        if key in activity_lower:
+            return emoji
+
+    return "📌"  # Default pin emoji

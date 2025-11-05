@@ -13,9 +13,9 @@ from rich.panel import Panel
 from .chat import start_chat_session
 from .config import PersonaLiteral, StyleLiteral, load_settings
 from .orchestrator import Orchestrator
-from .render import render_result, render_worldview
+from .render import render_result, render_story, render_worldview
 
-COMMAND_NAMES = {"forecast", "risk", "explain", "alerts", "chat"}
+COMMAND_NAMES = {"forecast", "risk", "explain", "alerts", "chat", "story"}
 _OPTIONS_WITH_VALUES = {"--style", "--persona"}
 
 
@@ -173,6 +173,40 @@ def chat(
     orchestrator: Orchestrator = ctx.obj["orchestrator"]
     json_mode: bool = ctx.obj["json"]
     start_chat_session(settings, orchestrator, console, verbose=verbose, json_mode=json_mode)
+
+
+@app.command()
+def story(
+    ctx: typer.Context,
+    place: str = typer.Argument(..., help="Target place name or lat,lon."),
+    when: str | None = typer.Option(None, "--when", help="Natural language time hint."),  # noqa: B008
+    horizon: str = typer.Option("12h", "--horizon", help="Story time span", case_sensitive=False),  # noqa: B008
+    focus: str | None = typer.Option(None, "--focus", help="Activity or concern focus."),  # noqa: B008
+    verbose: bool = typer.Option(False, "--verbose", help="Allow longer, more detailed stories."),  # noqa: B008
+):
+    """Generate a narrative weather story for a location.
+
+    Transform weather data into an engaging narrative that explains what's
+    happening in the atmosphere, why it matters, and what you should do.
+
+    Examples:
+        wx story "Seattle"
+        wx story "Denver" --when "tomorrow morning"
+        wx story "Chicago" --horizon 24h --focus "outdoor activities"
+    """
+    orchestrator: Orchestrator = ctx.obj["orchestrator"]
+    json_mode: bool = ctx.obj["json"]
+    debug: bool = ctx.obj["debug"]
+
+    result = orchestrator.handle_story(
+        place, when_text=when, horizon=horizon, focus=focus, verbose=verbose
+    )
+
+    render_story(result.story, console=console, json_mode=json_mode, verbose=verbose or debug)
+
+    if debug:
+        console.print(f"\n[dim]Timings: {result.timings}[/dim]")
+        console.print(f"[dim]Fetchers: {result.debug.get('fetchers', [])}[/dim]")
 
 
 def _normalize_invocation(args: Sequence[str]) -> list[str]:

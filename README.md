@@ -3,12 +3,13 @@
 wx is a conversational AI weather assistant that provides real-time weather data from the National Weather Service (NWS) and other sources. It combines powerful AI models with live weather data to answer your questions naturally.
 
 ## Highlights
+- **🎭 Weather Storytelling** *(NEW!)*: Transform data into engaging narratives that explain why weather happens, not just what's happening
 - **Conversational AI Bot**: Interactive chat mode for natural language weather queries
 - **Live NWS Data**: Real-time alerts, forecasts, observations, and gridded data from NOAA
 - **Enhanced Data Fetching**: Comprehensive NWS integration including forecast grids, observation stations, and hourly forecasts
 - **EU Weather Alerts**: Full MeteoAlarm XML parsing for European weather warnings
 - **Secure & Private**: API key validation and restricted file permissions for cached data
-- **Multiple Modes**: Freeform questions, structured forecasts, risk assessment, and interactive chat
+- **Multiple Modes**: Freeform questions, structured forecasts, risk assessment, narrative stories, and interactive chat
 - **Smart Rendering**: Improved word limiting with fair allocation across response sections
 - **Timezone Aware**: Properly handles local timezones in forecast windows
 - Routes through OpenRouter (Grok → ChatGPT OSS) with automatic Gemini fallback
@@ -43,7 +44,33 @@ Use CLI flags `--offline` and `--trust-tools` to temporarily override environmen
 
 ## Usage
 
-### Interactive Chat Mode (NEW!)
+### 📖 Weather Stories (NEW!)
+Transform weather data into engaging narratives:
+```bash
+# Basic story
+wx story "Seattle"
+
+# Time-specific story
+wx story "Denver" --when "tomorrow morning"
+
+# Focused story with extended horizon
+wx story "Chicago" --horizon 24h --focus "outdoor activities"
+
+# Detailed verbose story
+wx story "Boston" --verbose
+```
+
+Weather stories include:
+- **The Setup**: What's happening in the atmosphere and why
+- **The Present**: Current conditions with interpretation
+- **The Evolution**: Hour-by-hour timeline with confidence indicators
+- **The Meteorology**: Why this weather is happening (fronts, pressure systems, etc.)
+- **Your Decisions**: Activity-specific recommendations with reasoning
+- **Confidence Notes**: Uncertainty quantification and alternative scenarios
+
+[See full storytelling feature documentation →](STORYTELLING_FEATURE.md)
+
+### Interactive Chat Mode
 Start a conversational session with the AI weather bot:
 ```bash
 wx chat
@@ -137,6 +164,11 @@ wx --severe
 
 ### Advanced Examples
 ```bash
+# Weather story for specific scenarios
+wx story "Oklahoma City" --when "tonight" --focus "severe weather"
+wx story "Minneapolis" --horizon 3d --verbose  # Multi-day winter story
+wx story "Denver" --focus "aviation" --when "tomorrow morning"
+
 # Get comprehensive NWS data for a location (gridded forecast, stations, observations)
 # This is used internally by the chat bot when you ask detailed questions
 
@@ -150,6 +182,9 @@ wx risk "Miami" --hazards flooding,wind,storm --verbose
 wx chat
 # Then in chat: /location Portland, OR
 # Then ask: What's the forecast for tomorrow?
+
+# Export story as JSON for programmatic use
+wx story "Seattle" --json | jq '.story.evolution.phases'
 ```
 
 ## License
