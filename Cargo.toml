@@ -39,6 +39,9 @@ sled = "0.34"
 # Env variables
 dotenv = "0.15"
 
+# URL encoding
+urlencoding = "2.1"
+
 [dev-dependencies]
 mockito = "1.5"
 

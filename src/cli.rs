@@ -13,23 +13,36 @@ pub fn handle_story(
     verbose: bool,
     json: bool,
 ) -> Result<()> {
-    // Fetch weather data
+    // Fetch weather data (geocode + NWS API)
     let feature_pack = FeaturePack::fetch_blocking(place, config.offline)?;
 
-    // Generate story
+    // Generate story with AI or fallback to synthetic
     let story = if config.offline {
-        WeatherStory::synthetic(place)
+        let location_name = feature_pack
+            .location
+            .as_ref()
+            .map(|l| l.name.as_str())
+            .unwrap_or(place);
+        WeatherStory::synthetic(location_name)
     } else {
-        // Try AI generation, fallback to synthetic
-        WeatherStory::generate_with_ai(
-            place,
-            &serde_json::to_value(&feature_pack)?,
-            config,
-        )
-        .unwrap_or_else(|_| WeatherStory::synthetic(place))
+        // Try AI generation with real weather data
+        match WeatherStory::generate_with_ai(&feature_pack, config) {
+            Ok(story) => story,
+            Err(e) => {
+                if config.debug {
+                    eprintln!("AI generation failed: {}. Using synthetic data.", e);
+                }
+                let location_name = feature_pack
+                    .location
+                    .as_ref()
+                    .map(|l| l.name.as_str())
+                    .unwrap_or(place);
+                WeatherStory::synthetic(location_name)
+            }
+        }
     };
 
-    // Render
+    // Render beautiful story
     if json {
         println!("{}", render_story_json(&story));
     } else {

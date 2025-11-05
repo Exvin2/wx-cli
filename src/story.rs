@@ -105,15 +105,199 @@ impl WeatherStory {
         }
     }
 
-    /// Generate story using AI (calls Python subprocess as bridge)
+    /// Generate story using AI from weather data
     pub fn generate_with_ai(
-        location: &str,
-        _feature_pack: &serde_json::Value,
-        _config: &crate::config::Config,
+        feature_pack: &crate::fetchers::FeaturePack,
+        config: &crate::config::Config,
     ) -> Result<Self> {
-        // TODO: Bridge to Python for AI generation
-        // For now, return synthetic
-        Ok(Self::synthetic(location))
+        // Use blocking runtime for sync context
+        let rt = tokio::runtime::Runtime::new()?;
+        rt.block_on(Self::generate_with_ai_async(feature_pack, config))
+    }
+
+    /// Async version of AI generation
+    async fn generate_with_ai_async(
+        feature_pack: &crate::fetchers::FeaturePack,
+        config: &crate::config::Config,
+    ) -> Result<Self> {
+        // Prefer Gemini (free tier available), fall back to OpenRouter
+        if let Some(gemini_key) = &config.gemini_api_key {
+            Self::generate_with_gemini(feature_pack, config, gemini_key).await
+        } else if let Some(openrouter_key) = &config.openrouter_api_key {
+            Self::generate_with_openrouter(feature_pack, config, openrouter_key).await
+        } else {
+            // No API key available, use synthetic
+            let location_name = feature_pack
+                .location
+                .as_ref()
+                .map(|l| l.name.as_str())
+                .unwrap_or("Unknown");
+            Ok(Self::synthetic(location_name))
+        }
+    }
+
+    /// Generate story using Google Gemini API
+    async fn generate_with_gemini(
+        feature_pack: &crate::fetchers::FeaturePack,
+        config: &crate::config::Config,
+        api_key: &str,
+    ) -> Result<Self> {
+        use reqwest::Client;
+        use serde_json::json;
+
+        let prompt = Self::build_story_prompt(feature_pack)?;
+
+        let url = format!(
+            "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent?key={}",
+            config.gemini_model, api_key
+        );
+
+        let client = Client::new();
+        let response = client
+            .post(&url)
+            .json(&json!({
+                "contents": [{
+                    "parts": [{"text": prompt}]
+                }],
+                "generationConfig": {
+                    "temperature": config.temperature,
+                    "maxOutputTokens": config.max_tokens,
+                    "responseMimeType": "application/json"
+                }
+            }))
+            .send()
+            .await?;
+
+        let response_json: serde_json::Value = response.json().await?;
+
+        // Extract text from Gemini response
+        let story_text = response_json["candidates"][0]["content"]["parts"][0]["text"]
+            .as_str()
+            .ok_or_else(|| anyhow::anyhow!("Failed to extract story from Gemini response"))?;
+
+        // Parse JSON story
+        let story: WeatherStory = serde_json::from_str(story_text)?;
+        Ok(story)
+    }
+
+    /// Generate story using OpenRouter API
+    async fn generate_with_openrouter(
+        feature_pack: &crate::fetchers::FeaturePack,
+        config: &crate::config::Config,
+        api_key: &str,
+    ) -> Result<Self> {
+        use reqwest::Client;
+        use serde_json::json;
+
+        let prompt = Self::build_story_prompt(feature_pack)?;
+
+        let client = Client::new();
+        let response = client
+            .post("https://openrouter.ai/api/v1/chat/completions")
+            .header("Authorization", format!("Bearer {}", api_key))
+            .header("Content-Type", "application/json")
+            .json(&json!({
+                "model": config.openrouter_model,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ],
+                "temperature": config.temperature,
+                "max_tokens": config.max_tokens,
+                "response_format": {"type": "json_object"}
+            }))
+            .send()
+            .await?;
+
+        let response_json: serde_json::Value = response.json().await?;
+
+        // Extract text from OpenRouter response
+        let story_text = response_json["choices"][0]["message"]["content"]
+            .as_str()
+            .ok_or_else(|| anyhow::anyhow!("Failed to extract story from OpenRouter response"))?;
+
+        // Parse JSON story
+        let story: WeatherStory = serde_json::from_str(story_text)?;
+        Ok(story)
+    }
+
+    /// Build the AI prompt from feature pack data
+    fn build_story_prompt(feature_pack: &crate::fetchers::FeaturePack) -> Result<String> {
+        let location_name = feature_pack
+            .location
+            .as_ref()
+            .map(|l| l.name.clone())
+            .unwrap_or_else(|| "Unknown Location".to_string());
+
+        let forecast_summary = if let Some(forecast) = &feature_pack.forecast {
+            serde_json::to_string_pretty(forecast)?
+        } else {
+            "No forecast data available".to_string()
+        };
+
+        let current_summary = if let Some(current) = &feature_pack.current_conditions {
+            serde_json::to_string_pretty(current)?
+        } else {
+            "No current conditions available".to_string()
+        };
+
+        Ok(format!(
+            r#"You are an expert meteorologist crafting a weather story for {}.
+
+Weather Data:
+Current Conditions: {}
+Forecast: {}
+
+Create a compelling weather narrative as a JSON object with this EXACT structure:
+
+{{
+  "setup": "Opening meteorological context (1-2 sentences explaining the large-scale pattern)",
+  "current": "Current conditions described vividly (1-2 sentences)",
+  "evolution": {{
+    "phases": [
+      {{
+        "start_time": "Now",
+        "end_time": "6 hours",
+        "description": "What happens in this phase",
+        "key_changes": ["Change 1", "Change 2"],
+        "confidence": 0.85
+      }}
+    ]
+  }},
+  "meteorology": "Technical explanation of WHY this weather is happening (2-3 sentences)",
+  "decisions": [
+    {{
+      "activity": "Commuting",
+      "recommendation": "Specific actionable advice",
+      "reasoning": "Why this recommendation",
+      "timing": "Best time window",
+      "confidence": 0.8
+    }}
+  ],
+  "confidence": {{
+    "primary_uncertainty": "Main thing we're uncertain about",
+    "alternative_scenarios": ["Scenario 1", "Scenario 2"],
+    "confidence_level": "High",
+    "rationale": "Why we have this confidence level"
+  }},
+  "bottom_line": "One sentence TL;DR of the weather story"
+}}
+
+Guidelines:
+- Be specific and actionable
+- Explain WHY weather happens, not just WHAT
+- Confidence values are 0.0-1.0
+- confidence_level must be "High", "Medium", or "Low"
+- Include 2-4 timeline phases covering the next 12 hours
+- Include 2-4 decision recommendations
+- Use vivid but accurate language
+- Focus on practical impacts
+
+Return ONLY the JSON object, no other text."#,
+            location_name, current_summary, forecast_summary
+        ))
     }
 }
 

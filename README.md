@@ -54,6 +54,9 @@ wx --json story "Boston"
 ## Features
 
 ### ✅ Working Now
+- **Real NWS weather data** - Live forecasts from NOAA
+- **Geocoding** - Convert any location to coordinates
+- **AI story generation** - OpenRouter/Gemini integration
 - Weather stories with narrative format
 - Terminal rendering with colors/emojis
 - JSON output mode
@@ -61,10 +64,10 @@ wx --json story "Boston"
 - Offline mode
 
 ### 🚧 Coming Soon
-- Real weather data (NWS, Open-Meteo)
-- AI story generation
 - Chat mode
-- Alerts & risk assessment
+- Weather alerts integration
+- Risk assessment
+- World weather snapshot
 
 ---
 
@@ -82,17 +85,27 @@ wx --json story "Boston"
 
 ## Configuration
 
-Create a `.env` file (optional):
+Create a `.env` file for AI features (optional):
 
 ```bash
+# AI Story Generation (choose one)
+GEMINI_API_KEY=your-gemini-key-here      # Free tier available
+OPENROUTER_API_KEY=your-openrouter-key   # Or use OpenRouter
+
+# Optional: Customize AI behavior
+AI_TEMPERATURE=0.2
+AI_MAX_TOKENS=900
+
 # Units
 UNITS=imperial
 
-# Offline mode
+# Offline mode (uses synthetic data)
 WX_OFFLINE=0
 ```
 
-See [.env.example](.env.example) for more options.
+**Note**: Without API keys, wx falls back to synthetic data. The CLI works offline without any configuration - perfect for testing!
+
+See [.env.example](.env.example) for all options.
 
 ---
 
