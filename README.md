@@ -15,11 +15,34 @@ wx is a conversational AI weather assistant that provides real-time weather data
 - Privacy-first defaults: no Feature Pack history is written unless `PRIVACY_MODE=0`
 
 ## Installation
+
+### Quick Start (All Platforms)
 ```bash
 pip install -e .
 ```
 
 Requires Python 3.11+. A `wx` console script is registered on install.
+
+### Windows Installation
+For Windows users, we provide an automated installation script:
+
+```powershell
+.\install.ps1
+```
+
+This will:
+- Check Python version
+- Create a virtual environment
+- Install dependencies
+- Set up your `.env` configuration interactively
+
+For Windows-specific features (notifications, Task Scheduler), see [Windows Setup Guide](docs/WINDOWS_SETUP.md).
+
+**Windows Optional Features:**
+```powershell
+# Install Windows-specific features (notifications, file permissions)
+pip install -e .[windows]
+```
 
 ## Configuration
 wx automatically loads a local `.env` file if present (see `.env.example` for a starter template).
@@ -84,6 +107,46 @@ In chat mode, you can:
 - `--verbose` - Allow responses beyond 400 words
 - `--offline` - Skip all network fetchers
 - `--trust-tools` - Enable network micro-fetchers for enhanced data
+
+## Windows-Specific Features
+
+wx-cli includes special features for Windows 10/11 users:
+
+### Desktop Notifications
+Get toast notifications for severe weather alerts:
+```powershell
+# Install notification support
+pip install -e .[windows]
+
+# Enable in .env
+WX_NOTIFICATIONS=1
+
+# Test notifications
+python wx\notifications_windows.py
+```
+
+### Task Scheduler Integration
+Automate weather checks with Windows Task Scheduler:
+```powershell
+# Set up automated tasks (requires Administrator)
+.\scripts\setup-scheduled-task.ps1
+
+# Options:
+# - Morning weather briefing (7:00 AM daily)
+# - Severe weather monitoring (every 30 minutes)
+# - Custom schedules
+```
+
+### Configuration Wizard
+User-friendly GUI for configuration (no command-line needed):
+```powershell
+python wx\config_wizard.py
+```
+
+### Enhanced File Security
+Windows-specific file permissions using ACLs for secure cache file storage.
+
+For complete Windows setup instructions, see [Windows Setup Guide](docs/WINDOWS_SETUP.md).
 
 ## Testing
 ```bash

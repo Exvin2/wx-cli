@@ -190,6 +190,7 @@ class Settings:
 
             # Write with restricted permissions (user read/write only)
             import os
+            import sys
             import tempfile
 
             # Write to temp file first, then move (atomic operation)
@@ -200,8 +201,8 @@ class Settings:
                 with os.fdopen(fd, "w") as f:
                     f.write(json.dumps(minimal_payload, ensure_ascii=True, indent=2))
 
-                # Set restrictive permissions (0o600 = rw-------)
-                os.chmod(temp_path, 0o600)
+                # Set restrictive permissions (platform-specific)
+                _set_secure_permissions(temp_path)
 
                 # Atomic move
                 os.replace(temp_path, self.state_file)
@@ -403,3 +404,63 @@ def get_http_config() -> dict[str, Any]:
         "timeout": float(os.getenv("WX_HTTP_TIMEOUT", str(DEFAULT_HTTP_TIMEOUT))),
         "retries": int(os.getenv("WX_HTTP_RETRIES", str(DEFAULT_HTTP_RETRIES))),
     }
+
+
+def _set_secure_permissions(file_path: str | Path) -> None:
+    """Set secure file permissions (user read/write only) on Unix and Windows.
+
+    On Unix/Linux/macOS: Uses chmod to set 0o600 (rw-------)
+    On Windows: Uses ACLs to grant full control to owner only
+    Falls back gracefully if permission setting fails.
+    """
+    import os
+    import sys
+
+    try:
+        if sys.platform == "win32":
+            # Windows: Use ACLs for proper security
+            try:
+                import win32security
+                import ntsecuritycon as con
+
+                # Get the current user's SID
+                user, _, _ = win32security.LookupAccountName("", os.getlogin())
+
+                # Create a new DACL (Discretionary Access Control List)
+                dacl = win32security.ACL()
+
+                # Grant full control to the owner only
+                dacl.AddAccessAllowedAce(
+                    win32security.ACL_REVISION,
+                    con.FILE_ALL_ACCESS,
+                    user,
+                )
+
+                # Get security descriptor
+                sd = win32security.SECURITY_DESCRIPTOR()
+                sd.SetSecurityDescriptorDacl(1, dacl, 0)
+
+                # Apply the security descriptor to the file
+                win32security.SetFileSecurity(
+                    str(file_path),
+                    win32security.DACL_SECURITY_INFORMATION,
+                    sd,
+                )
+            except ImportError:
+                # pywin32 not available, fall back to basic os.chmod
+                # Note: On Windows, os.chmod has limited effect
+                os.chmod(file_path, 0o600)
+            except Exception:  # noqa: BLE001
+                # Any other error, try basic chmod as fallback
+                try:
+                    os.chmod(file_path, 0o600)
+                except OSError:
+                    # Permission setting failed, but don't crash
+                    pass
+        else:
+            # Unix/Linux/macOS: Use standard chmod
+            os.chmod(file_path, 0o600)
+    except Exception:  # noqa: BLE001
+        # If all else fails, just continue without setting permissions
+        # Better to have the file with wrong permissions than crash
+        pass

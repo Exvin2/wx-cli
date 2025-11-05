@@ -24,6 +24,10 @@ dev = [
     "pytest>=7.4",
     "pytest-mock>=3.12",
 ]
+windows = [
+    "pywin32>=305; sys_platform == 'win32'",
+    "win10toast>=0.9; sys_platform == 'win32'",
+]
 
 [project.urls]
 Homepage = "https://github.com/Exvin2/claudex-cli"
