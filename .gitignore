@@ -49,3 +49,5 @@ Thumbs.db
 # Cache
 .cache/
 *.log
+target/
+Cargo.lock
