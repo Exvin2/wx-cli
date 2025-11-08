@@ -1,106 +1,224 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Lightning-fast weather intelligence powered by Rust and AI">
     <title>wx - Weather Intelligence</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        .fade-in {
-            animation: fadeIn 0.3s ease-out;
-        }
+        body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
     </style>
 </head>
-<body class="bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen">
-    <div class="container mx-auto px-4 py-8 max-w-4xl">
+<body>
+    <!-- Animated Background -->
+    <div class="background-animated" id="bgAnimated"></div>
+
+    <div class="container mx-auto px-4 py-6 max-w-6xl relative z-10">
         <!-- Header -->
-        <header class="text-center mb-12">
-            <h1 class="text-5xl font-bold text-gray-900 mb-2">⚡ wx</h1>
-            <p class="text-xl text-gray-600">Weather Intelligence at Lightning Speed</p>
-            <p class="text-sm text-gray-500 mt-2">Powered by Rust + AI</p>
+        <header class="text-center mb-8 fade-in">
+            <div class="flex justify-between items-center mb-6">
+                <div class="flex items-center gap-3">
+                    <span class="text-4xl weather-icon">⚡</span>
+                    <h1 class="text-3xl md:text-4xl font-bold" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
+                        wx
+                    </h1>
+                </div>
+
+                <!-- Dark Mode Toggle -->
+                <div class="flex items-center gap-4">
+                    <button id="geoBtn" class="px-4 py-2 glass rounded-lg hover:scale-105 transition tooltip" data-tooltip="Use my location">
+                        <span class="text-xl">📍</span>
+                    </button>
+                    <div class="theme-toggle" id="themeToggle">
+                        <div class="theme-toggle-circle"></div>
+                    </div>
+                </div>
+            </div>
+
+            <p class="text-lg md:text-xl text-secondary mb-2">Weather Intelligence at Lightning Speed</p>
+            <p class="text-sm text-muted">Powered by Rust + AI • Real-time NWS Data</p>
         </header>
 
-        <!-- Search -->
-        <div class="bg-white rounded-2xl shadow-xl p-6 mb-8">
-            <div class="flex gap-3">
-                <input
-                    id="locationInput"
-                    type="text"
-                    placeholder="Enter location (e.g., Seattle, Tokyo, London)"
-                    class="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-lg"
-                    value="Seattle"
-                />
+        <!-- Search Section -->
+        <div class="glass rounded-2xl shadow-2xl p-6 mb-6 slide-up">
+            <div class="flex flex-col md:flex-row gap-3">
+                <div class="flex-1 relative">
+                    <input
+                        id="locationInput"
+                        type="text"
+                        placeholder="🔍 Search location (Seattle, Tokyo, London...)"
+                        class="w-full px-5 py-4 glass rounded-xl text-lg focus:ring-2 focus:ring-blue-500 transition"
+                        autocomplete="off"
+                        list="recentSearches"
+                    />
+                    <datalist id="recentSearches"></datalist>
+                    <button id="clearInput" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 hidden">
+                        ✕
+                    </button>
+                </div>
                 <button
                     id="searchBtn"
-                    class="px-8 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-semibold"
+                    class="px-8 py-4 rounded-xl font-semibold text-white transition shadow-lg hover:shadow-xl"
+                    style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);"
                 >
-                    Get Story
+                    <span class="flex items-center justify-center gap-2">
+                        <span>Get Story</span>
+                        <span class="text-xl">→</span>
+                    </span>
                 </button>
             </div>
-        </div>
 
-        <!-- Loading -->
-        <div id="loading" class="hidden text-center py-12">
-            <div class="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-            <p class="mt-4 text-gray-600">Fetching weather intelligence...</p>
-        </div>
-
-        <!-- Error -->
-        <div id="error" class="hidden bg-red-50 border border-red-200 rounded-lg p-6 mb-8">
-            <p class="text-red-800 font-semibold">Error</p>
-            <p id="errorMessage" class="text-red-600"></p>
-        </div>
-
-        <!-- Story -->
-        <div id="story" class="hidden fade-in">
-            <!-- Alerts -->
-            <div id="alerts" class="hidden bg-red-100 border-2 border-red-500 rounded-lg p-6 mb-8">
-                <h2 class="text-2xl font-bold text-red-900 mb-4">🚨 Active Weather Alerts</h2>
-                <div id="alertsList"></div>
+            <!-- Favorites -->
+            <div id="favoritesContainer" class="mt-4 hidden">
+                <p class="text-sm text-muted mb-2">⭐ Favorites</p>
+                <div id="favoritesList" class="flex flex-wrap gap-2"></div>
             </div>
 
-            <!-- Weather Story -->
-            <div class="bg-white rounded-2xl shadow-xl p-8 space-y-8">
+            <!-- Recent Searches -->
+            <div id="recentsContainer" class="mt-4 hidden">
+                <p class="text-sm text-muted mb-2">🕐 Recent</p>
+                <div id="recentsList" class="flex flex-wrap gap-2"></div>
+            </div>
+
+            <!-- Keyboard Hint -->
+            <p class="text-xs text-muted mt-3 text-center">
+                Press <kbd class="px-2 py-1 glass rounded text-xs">Enter</kbd> to search •
+                <kbd class="px-2 py-1 glass rounded text-xs">Ctrl+K</kbd> to focus
+            </p>
+        </div>
+
+        <!-- Loading State -->
+        <div id="loading" class="hidden">
+            <div class="glass rounded-2xl p-12 text-center scale-in">
+                <div class="relative w-16 h-16 mx-auto mb-4">
+                    <div class="absolute inset-0 border-4 border-blue-200 rounded-full"></div>
+                    <div class="absolute inset-0 border-4 border-blue-600 rounded-full border-t-transparent animate-spin"></div>
+                </div>
+                <p class="text-lg font-medium">Fetching weather intelligence...</p>
+                <p class="text-sm text-muted mt-2">This usually takes 1-3 seconds</p>
+            </div>
+        </div>
+
+        <!-- Error State -->
+        <div id="error" class="hidden scale-in">
+            <div class="glass rounded-2xl p-8 border-2 border-red-500">
+                <div class="flex items-start gap-4">
+                    <span class="text-4xl">⚠️</span>
+                    <div class="flex-1">
+                        <p class="font-bold text-lg mb-1">Something went wrong</p>
+                        <p id="errorMessage" class="text-secondary"></p>
+                        <button id="retryBtn" class="mt-4 px-4 py-2 glass rounded-lg hover:scale-105 transition">
+                            Try Again
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Weather Story -->
+        <div id="story" class="hidden space-y-6">
+            <!-- Alerts (if any) -->
+            <div id="alertsContainer" class="hidden scale-in">
+                <div class="glass rounded-2xl p-6 border-2 border-red-500 alert-pulse">
+                    <div class="flex items-center gap-3 mb-4">
+                        <span class="text-3xl">🚨</span>
+                        <h2 class="text-2xl font-bold">Active Weather Alerts</h2>
+                    </div>
+                    <div id="alertsList" class="space-y-3"></div>
+                </div>
+            </div>
+
+            <!-- Main Story Card -->
+            <div class="glass rounded-2xl shadow-2xl p-8 slide-up">
+                <!-- Header with Location -->
+                <div class="flex justify-between items-start mb-8">
+                    <div class="flex-1">
+                        <h2 id="storyLocation" class="text-3xl font-bold mb-2"></h2>
+                        <p class="text-muted" id="storyTime"></p>
+                    </div>
+                    <button id="favoriteBtn" class="favorite-star text-3xl" title="Add to favorites">
+                        ☆
+                    </button>
+                </div>
+
                 <!-- Setup -->
-                <section>
-                    <h2 class="text-2xl font-bold text-blue-900 mb-3">🌤️ The Setup</h2>
-                    <p id="setup" class="text-gray-700 leading-relaxed"></p>
+                <section class="mb-8 scroll-reveal">
+                    <div class="flex items-center gap-3 mb-4">
+                        <span class="text-3xl">🌤️</span>
+                        <h3 class="text-2xl font-bold">The Setup</h3>
+                    </div>
+                    <div class="glass rounded-xl p-6">
+                        <p id="setup" class="text-lg leading-relaxed"></p>
+                    </div>
                 </section>
 
-                <!-- Current -->
-                <section>
-                    <h2 class="text-2xl font-bold text-cyan-900 mb-3">🌡️ Right Now</h2>
-                    <p id="current" class="text-gray-700 leading-relaxed"></p>
+                <!-- Current Conditions -->
+                <section class="mb-8 scroll-reveal">
+                    <div class="flex items-center gap-3 mb-4">
+                        <span class="text-3xl">🌡️</span>
+                        <h3 class="text-2xl font-bold">Right Now</h3>
+                    </div>
+                    <div class="glass rounded-xl p-6">
+                        <p id="current" class="text-lg leading-relaxed"></p>
+                    </div>
                 </section>
 
-                <!-- Evolution -->
-                <section id="evolutionSection">
-                    <h2 class="text-2xl font-bold text-yellow-900 mb-3">⏳ Timeline</h2>
-                    <div id="timeline" class="space-y-4"></div>
+                <!-- Timeline -->
+                <section class="mb-8 scroll-reveal" id="timelineSection">
+                    <div class="flex items-center gap-3 mb-4">
+                        <span class="text-3xl">⏳</span>
+                        <h3 class="text-2xl font-bold">Timeline</h3>
+                    </div>
+                    <div class="glass rounded-xl p-6">
+                        <div id="timeline"></div>
+                    </div>
                 </section>
 
                 <!-- Meteorology -->
-                <section>
-                    <h2 class="text-2xl font-bold text-purple-900 mb-3">🌀 The Science</h2>
-                    <p id="meteorology" class="text-gray-700 leading-relaxed"></p>
+                <section class="mb-8 scroll-reveal">
+                    <div class="flex items-center gap-3 mb-4">
+                        <span class="text-3xl">🌀</span>
+                        <h3 class="text-2xl font-bold">The Science</h3>
+                    </div>
+                    <div class="glass rounded-xl p-6">
+                        <p id="meteorology" class="text-lg leading-relaxed"></p>
+                    </div>
                 </section>
 
                 <!-- Decisions -->
-                <section id="decisionsSection">
-                    <h2 class="text-2xl font-bold text-green-900 mb-3">🎯 Your Decisions</h2>
-                    <div id="decisions" class="space-y-4"></div>
+                <section class="mb-8 scroll-reveal" id="decisionsSection">
+                    <div class="flex items-center gap-3 mb-4">
+                        <span class="text-3xl">🎯</span>
+                        <h3 class="text-2xl font-bold">Your Decisions</h3>
+                    </div>
+                    <div id="decisions" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
                 </section>
 
                 <!-- Bottom Line -->
-                <section class="bg-yellow-50 rounded-lg p-6 border-2 border-yellow-300">
-                    <p class="text-lg font-semibold text-gray-900">💡 <span id="bottomLine"></span></p>
+                <section class="scroll-reveal">
+                    <div class="rounded-xl p-6 text-center" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+                        <p class="text-2xl font-bold text-white mb-2">💡 Bottom Line</p>
+                        <p id="bottomLine" class="text-xl text-white leading-relaxed"></p>
+                    </div>
                 </section>
+
+                <!-- Share Button -->
+                <div class="mt-6 text-center">
+                    <button id="shareBtn" class="px-6 py-3 glass rounded-xl hover:scale-105 transition">
+                        Share this story 📤
+                    </button>
+                </div>
             </div>
         </div>
+
+        <!-- Footer -->
+        <footer class="text-center mt-12 text-sm text-muted fade-in">
+            <p>Built with ⚡ Rust + 🧠 AI • Data from NOAA NWS</p>
+            <p class="mt-2">Open source • Lightning fast • Privacy-first</p>
+        </footer>
     </div>
 
     <script src="app.js"></script>
