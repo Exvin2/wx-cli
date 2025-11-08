@@ -42,11 +42,11 @@ pub fn handle_story(
         }
     };
 
-    // Render beautiful story
+    // Render beautiful story with alerts
     if json {
         println!("{}", render_story_json(&story));
     } else {
-        render_story(&story, verbose);
+        render_story(&story, &feature_pack.alerts, verbose);
     }
 
     Ok(())

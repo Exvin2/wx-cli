@@ -1,8 +1,14 @@
 use crate::story::{WeatherStory, ConfidenceLevel, confidence_bar, activity_emoji};
+use crate::fetchers::Alert;
 use colored::*;
 
 /// Render a weather story to the terminal
-pub fn render_story(story: &WeatherStory, verbose: bool) {
+pub fn render_story(story: &WeatherStory, alerts: &[Alert], verbose: bool) {
+    // CRITICAL: Show alerts FIRST if present
+    if !alerts.is_empty() {
+        render_alerts(alerts);
+    }
+
     // Title
     println!("\n{}", "📖  Weather Story".cyan().bold());
     println!();
@@ -99,6 +105,45 @@ fn print_section_header(title: &str, subtitle: &str, color: &str) {
         println!("{} {}", title.bold(), subtitle.dimmed());
     }
     println!("{}", separator.color(color));
+}
+
+/// Render active alerts with high visibility
+fn render_alerts(alerts: &[Alert]) {
+    println!();
+    let alert_header = "🚨  ACTIVE WEATHER ALERTS  🚨";
+    let separator = "═".repeat(alert_header.len());
+
+    println!("{}", separator.red().bold());
+    println!("{}", alert_header.red().bold().on_bright_black());
+    println!("{}", separator.red().bold());
+    println!();
+
+    for (i, alert) in alerts.iter().enumerate() {
+        // Severity color coding
+        let severity_display = match alert.severity.to_uppercase().as_str() {
+            "EXTREME" => format!("⚠️  {} ⚠️", alert.severity.to_uppercase()).red().bold().on_bright_white(),
+            "SEVERE" => alert.severity.to_uppercase().red().bold(),
+            "MODERATE" => alert.severity.to_uppercase().yellow().bold(),
+            _ => alert.severity.to_uppercase().white().bold(),
+        };
+
+        println!("{} {}", format!("Alert {}/{}:", i + 1, alerts.len()).dimmed(), severity_display);
+        println!("{}", alert.event.bright_red().bold());
+        println!();
+        println!("{}", alert.description);
+
+        if !alert.areas.is_empty() {
+            println!();
+            println!("{}", "Affected areas:".dimmed());
+            for area in &alert.areas {
+                println!("  • {}", area);
+            }
+        }
+
+        println!();
+        println!("{}", "─".repeat(60).red());
+        println!();
+    }
 }
 
 /// Render story as JSON

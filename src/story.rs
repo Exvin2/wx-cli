@@ -243,60 +243,78 @@ impl WeatherStory {
             "No current conditions available".to_string()
         };
 
+        // Include alerts if present
+        let alerts_section = if !feature_pack.alerts.is_empty() {
+            let alerts_json = serde_json::to_string_pretty(&feature_pack.alerts)?;
+            format!("\n\n🚨 ACTIVE ALERTS:\n{}\n\nIMPORTANT: Integrate these alerts into your story. Prioritize safety. Explain what these alerts mean for decisions.", alerts_json)
+        } else {
+            String::new()
+        };
+
         Ok(format!(
             r#"You are an expert meteorologist crafting a weather story for {}.
 
 Weather Data:
 Current Conditions: {}
-Forecast: {}
+Forecast: {}{}
 
-Create a compelling weather narrative as a JSON object with this EXACT structure:
+Create a compelling, scientifically-grounded weather narrative as JSON:
 
 {{
-  "setup": "Opening meteorological context (1-2 sentences explaining the large-scale pattern)",
-  "current": "Current conditions described vividly (1-2 sentences)",
+  "setup": "Large-scale meteorological pattern (2-3 sentences). Mention pressure systems, fronts, jet stream position, moisture sources. Use technical terms like 'low-pressure trough', 'high-pressure ridge', 'atmospheric river', 'convergence zone'.",
+
+  "current": "Vivid description of current conditions (2 sentences). Include sensory details and immediate impacts.",
+
   "evolution": {{
     "phases": [
       {{
         "start_time": "Now",
-        "end_time": "6 hours",
-        "description": "What happens in this phase",
-        "key_changes": ["Change 1", "Change 2"],
+        "end_time": "3 hours",
+        "description": "Detailed phase description with mechanisms (lifting, cooling, mixing)",
+        "key_changes": ["Specific measurable change", "Another specific change"],
         "confidence": 0.85
       }}
+      // Include 3-5 phases covering next 12-24 hours
     ]
   }},
-  "meteorology": "Technical explanation of WHY this weather is happening (2-3 sentences)",
+
+  "meteorology": "Deep dive into WHY (3-4 sentences). Explain atmospheric physics: Why is this system behaving this way? What forcings are at play? Mention CAPE, lifted index, lapse rates, wind shear, dewpoint spread, or other relevant parameters when applicable. Make the reader understand the cause-effect chain.",
+
   "decisions": [
     {{
-      "activity": "Commuting",
-      "recommendation": "Specific actionable advice",
-      "reasoning": "Why this recommendation",
-      "timing": "Best time window",
+      "activity": "Specific activity (e.g., 'Morning commute', 'Outdoor lunch', 'Evening flight')",
+      "recommendation": "CLEAR actionable advice with specific timing",
+      "reasoning": "Physical reason based on meteorology (not just 'because rain')",
+      "timing": "Exact time window (e.g., 'Leave before 7 AM or after 9 PM')",
       "confidence": 0.8
     }}
+    // Include 3-5 decision items covering different activities and time windows
   ],
+
   "confidence": {{
-    "primary_uncertainty": "Main thing we're uncertain about",
-    "alternative_scenarios": ["Scenario 1", "Scenario 2"],
-    "confidence_level": "High",
-    "rationale": "Why we have this confidence level"
+    "primary_uncertainty": "Specific meteorological uncertainty (e.g., 'Exact timing of cold front passage', 'Convective initiation location')",
+    "alternative_scenarios": [
+      "If X happens: outcome",
+      "If Y happens: different outcome"
+    ],
+    "confidence_level": "High|Medium|Low",
+    "rationale": "Why we have this confidence (model agreement, pattern recognition, physical reasoning)"
   }},
-  "bottom_line": "One sentence TL;DR of the weather story"
+
+  "bottom_line": "One punchy sentence combining impact + timing + action. Make it memorable."
 }}
 
-Guidelines:
-- Be specific and actionable
-- Explain WHY weather happens, not just WHAT
-- Confidence values are 0.0-1.0
-- confidence_level must be "High", "Medium", or "Low"
-- Include 2-4 timeline phases covering the next 12 hours
-- Include 2-4 decision recommendations
-- Use vivid but accurate language
-- Focus on practical impacts
+CRITICAL Guidelines:
+- EXPLAIN MECHANISMS, not just patterns. Say WHY air rises, WHY clouds form, WHY winds shift
+- Use meteorological terminology appropriately: CAPE, vorticity, baroclinic zones, thermal advection, etc.
+- Decisions must be TIME-SPECIFIC and ACTIONABLE (not vague like "be careful")
+- If alerts are present, EMPHASIZE THEM and explain their implications
+- Confidence should reflect actual meteorological uncertainty (not just hedging)
+- Timeline phases should show EVOLUTION not just snapshots
+- Bottom line should tell someone "what to do when" in one sentence
 
 Return ONLY the JSON object, no other text."#,
-            location_name, current_summary, forecast_summary
+            location_name, current_summary, forecast_summary, alerts_section
         ))
     }
 }

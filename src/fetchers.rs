@@ -1,6 +1,7 @@
 use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
+use crate::cache::{Cache, TTL_GEOCODE, TTL_FORECAST, TTL_ALERTS};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FeaturePack {
@@ -57,13 +58,28 @@ impl FeaturePack {
             return Ok(Self::synthetic(location_query));
         }
 
-        // Step 1: Geocode location
-        let location = geocode_location(location_query).await?;
+        let cache = Cache::open().ok();
 
-        // Step 2: Fetch NWS forecast data
+        // Step 1: Geocode location (with caching)
+        let location = geocode_location_cached(location_query, cache.as_ref()).await?;
+
+        // Step 2: Check forecast cache
+        let forecast_key = Cache::forecast_key(location.lat, location.lon);
+        if let Some(cache) = cache.as_ref() {
+            if let Some(cached) = cache.get::<FeaturePack>(&forecast_key, TTL_FORECAST) {
+                return Ok(cached);
+            }
+        }
+
+        // Step 3: Fetch NWS forecast data
         let forecast_periods = fetch_nws_forecast(location.lat, location.lon).await?;
 
-        // Step 3: Build current conditions from first period
+        // Step 4: Fetch NWS alerts (with caching)
+        let alerts = fetch_nws_alerts_cached(location.lat, location.lon, cache.as_ref())
+            .await
+            .unwrap_or_default();
+
+        // Step 5: Build current conditions from first period
         let current_conditions = if let Some(first) = forecast_periods.first() {
             serde_json::json!({
                 "temp": first.temperature,
@@ -76,18 +92,25 @@ impl FeaturePack {
             serde_json::json!({})
         };
 
-        // Step 4: Package forecast data
+        // Step 6: Package forecast data
         let forecast = serde_json::json!({
             "periods": forecast_periods
         });
 
-        Ok(FeaturePack {
+        let feature_pack = FeaturePack {
             location: Some(location),
             current_conditions: Some(current_conditions),
             forecast: Some(forecast),
-            alerts: vec![], // TODO: Fetch alerts from NWS
+            alerts,
             timestamp: chrono::Utc::now().to_rfc3339(),
-        })
+        };
+
+        // Cache the result
+        if let Some(cache) = cache {
+            let _ = cache.set(&forecast_key, feature_pack.clone());
+        }
+
+        Ok(feature_pack)
     }
 
     /// Blocking version of fetch
@@ -134,6 +157,28 @@ async fn geocode_location(query: &str) -> Result<Location> {
     } else {
         Err(anyhow!("Location '{}' not found", query))
     }
+}
+
+/// Geocode with caching (locations don't change, cache forever)
+async fn geocode_location_cached(query: &str, cache: Option<&Cache>) -> Result<Location> {
+    let cache_key = Cache::geocode_key(query);
+
+    // Try cache first
+    if let Some(cache) = cache {
+        if let Some(cached) = cache.get::<Location>(&cache_key, TTL_GEOCODE) {
+            return Ok(cached);
+        }
+    }
+
+    // Cache miss, fetch from API
+    let location = geocode_location(query).await?;
+
+    // Store in cache
+    if let Some(cache) = cache {
+        let _ = cache.set(&cache_key, location.clone());
+    }
+
+    Ok(location)
 }
 
 /// NWS Points API response (subset)
@@ -213,4 +258,85 @@ async fn fetch_nws_forecast(lat: f64, lon: f64) -> Result<Vec<NWSForecastPeriod>
         .await?;
 
     Ok(forecast_response.properties.periods)
+}
+
+/// NWS Alerts API response
+#[derive(Debug, Deserialize)]
+struct NWSAlertsResponse {
+    features: Vec<NWSAlertFeature>,
+}
+
+#[derive(Debug, Deserialize)]
+struct NWSAlertFeature {
+    properties: NWSAlertProperties,
+}
+
+#[derive(Debug, Deserialize)]
+struct NWSAlertProperties {
+    event: String,
+    severity: String,
+    #[serde(rename = "areaDesc")]
+    area_desc: String,
+    headline: Option<String>,
+    description: String,
+    instruction: Option<String>,
+}
+
+/// Fetch active NWS alerts for a location
+async fn fetch_nws_alerts(lat: f64, lon: f64) -> Result<Vec<Alert>> {
+    let url = format!(
+        "https://api.weather.gov/alerts/active?point={:.4},{:.4}",
+        lat, lon
+    );
+
+    let client = reqwest::Client::builder()
+        .user_agent("wx-cli/0.2.0 (weather storytelling CLI)")
+        .timeout(Duration::from_secs(10))
+        .build()?;
+
+    let response: NWSAlertsResponse = client
+        .get(&url)
+        .send()
+        .await?
+        .json()
+        .await?;
+
+    // Convert to our Alert format
+    let alerts: Vec<Alert> = response
+        .features
+        .into_iter()
+        .map(|f| {
+            let props = f.properties;
+            Alert {
+                event: props.event,
+                severity: props.severity,
+                description: props.headline.unwrap_or(props.description),
+                areas: props.area_desc.split("; ").map(|s| s.to_string()).collect(),
+            }
+        })
+        .collect();
+
+    Ok(alerts)
+}
+
+/// Fetch alerts with caching (5 minute TTL - time critical)
+async fn fetch_nws_alerts_cached(lat: f64, lon: f64, cache: Option<&Cache>) -> Result<Vec<Alert>> {
+    let cache_key = Cache::alerts_key(lat, lon);
+
+    // Try cache first
+    if let Some(cache) = cache {
+        if let Some(cached) = cache.get::<Vec<Alert>>(&cache_key, TTL_ALERTS) {
+            return Ok(cached);
+        }
+    }
+
+    // Cache miss, fetch from API
+    let alerts = fetch_nws_alerts(lat, lon).await.unwrap_or_default();
+
+    // Store in cache
+    if let Some(cache) = cache {
+        let _ = cache.set(&cache_key, alerts.clone());
+    }
+
+    Ok(alerts)
 }
