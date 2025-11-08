@@ -86,7 +86,7 @@ async fn get_story(
     Query(params): Query<LocationQuery>,
 ) -> Result<Json<story::WeatherStory>, AppError> {
     // Fetch weather data
-    let feature_pack = fetchers::FeaturePack::fetch_blocking(&params.location, state.config.offline)
+    let feature_pack = fetchers::FeaturePack::fetch(&params.location, state.config.offline).await
         .map_err(|e| AppError::Internal(e.to_string()))?;
 
     // Generate story
@@ -116,7 +116,7 @@ async fn get_forecast(
     State(state): State<Arc<AppState>>,
     Query(params): Query<LocationQuery>,
 ) -> Result<Json<fetchers::FeaturePack>, AppError> {
-    let feature_pack = fetchers::FeaturePack::fetch_blocking(&params.location, state.config.offline)
+    let feature_pack = fetchers::FeaturePack::fetch(&params.location, state.config.offline).await
         .map_err(|e| AppError::Internal(e.to_string()))?;
 
     Ok(Json(feature_pack))
@@ -132,7 +132,7 @@ async fn get_alerts(
     State(state): State<Arc<AppState>>,
     Query(params): Query<LocationQuery>,
 ) -> Result<Json<AlertsResponse>, AppError> {
-    let feature_pack = fetchers::FeaturePack::fetch_blocking(&params.location, state.config.offline)
+    let feature_pack = fetchers::FeaturePack::fetch(&params.location, state.config.offline).await
         .map_err(|e| AppError::Internal(e.to_string()))?;
 
     let count = feature_pack.alerts.len();
