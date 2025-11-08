@@ -6,9 +6,17 @@ authors = ["wx contributors"]
 description = "Lightning-fast weather CLI with AI storytelling"
 license = "Proprietary"
 
+[lib]
+name = "wx"
+path = "src/lib.rs"
+
 [[bin]]
 name = "wx"
 path = "src/main.rs"
+
+[[bin]]
+name = "wx-server"
+path = "src/bin/server.rs"
 
 [dependencies]
 # CLI parsing - fast and elegant
@@ -42,6 +50,13 @@ dotenv = "0.15"
 
 # URL encoding
 urlencoding = "2.1"
+
+# Web server (for wx-server binary)
+axum = "0.7"
+tower = "0.4"
+tower-http = { version = "0.5", features = ["fs", "cors", "trace"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [dev-dependencies]
 mockito = "1.5"

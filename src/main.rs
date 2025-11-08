@@ -1,13 +1,8 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 
-mod cache;
-mod cli;
-mod config;
-mod fetchers;
-mod profile;
-mod render;
-mod story;
+// Use library modules
+use wx::{cli, config, profile};
 
 #[derive(Parser)]
 #[command(name = "wx")]

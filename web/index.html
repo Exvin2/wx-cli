@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>wx - Weather Intelligence</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .fade-in {
+            animation: fadeIn 0.3s ease-out;
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen">
+    <div class="container mx-auto px-4 py-8 max-w-4xl">
+        <!-- Header -->
+        <header class="text-center mb-12">
+            <h1 class="text-5xl font-bold text-gray-900 mb-2">⚡ wx</h1>
+            <p class="text-xl text-gray-600">Weather Intelligence at Lightning Speed</p>
+            <p class="text-sm text-gray-500 mt-2">Powered by Rust + AI</p>
+        </header>
+
+        <!-- Search -->
+        <div class="bg-white rounded-2xl shadow-xl p-6 mb-8">
+            <div class="flex gap-3">
+                <input
+                    id="locationInput"
+                    type="text"
+                    placeholder="Enter location (e.g., Seattle, Tokyo, London)"
+                    class="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-lg"
+                    value="Seattle"
+                />
+                <button
+                    id="searchBtn"
+                    class="px-8 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-semibold"
+                >
+                    Get Story
+                </button>
+            </div>
+        </div>
+
+        <!-- Loading -->
+        <div id="loading" class="hidden text-center py-12">
+            <div class="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+            <p class="mt-4 text-gray-600">Fetching weather intelligence...</p>
+        </div>
+
+        <!-- Error -->
+        <div id="error" class="hidden bg-red-50 border border-red-200 rounded-lg p-6 mb-8">
+            <p class="text-red-800 font-semibold">Error</p>
+            <p id="errorMessage" class="text-red-600"></p>
+        </div>
+
+        <!-- Story -->
+        <div id="story" class="hidden fade-in">
+            <!-- Alerts -->
+            <div id="alerts" class="hidden bg-red-100 border-2 border-red-500 rounded-lg p-6 mb-8">
+                <h2 class="text-2xl font-bold text-red-900 mb-4">🚨 Active Weather Alerts</h2>
+                <div id="alertsList"></div>
+            </div>
+
+            <!-- Weather Story -->
+            <div class="bg-white rounded-2xl shadow-xl p-8 space-y-8">
+                <!-- Setup -->
+                <section>
+                    <h2 class="text-2xl font-bold text-blue-900 mb-3">🌤️ The Setup</h2>
+                    <p id="setup" class="text-gray-700 leading-relaxed"></p>
+                </section>
+
+                <!-- Current -->
+                <section>
+                    <h2 class="text-2xl font-bold text-cyan-900 mb-3">🌡️ Right Now</h2>
+                    <p id="current" class="text-gray-700 leading-relaxed"></p>
+                </section>
+
+                <!-- Evolution -->
+                <section id="evolutionSection">
+                    <h2 class="text-2xl font-bold text-yellow-900 mb-3">⏳ Timeline</h2>
+                    <div id="timeline" class="space-y-4"></div>
+                </section>
+
+                <!-- Meteorology -->
+                <section>
+                    <h2 class="text-2xl font-bold text-purple-900 mb-3">🌀 The Science</h2>
+                    <p id="meteorology" class="text-gray-700 leading-relaxed"></p>
+                </section>
+
+                <!-- Decisions -->
+                <section id="decisionsSection">
+                    <h2 class="text-2xl font-bold text-green-900 mb-3">🎯 Your Decisions</h2>
+                    <div id="decisions" class="space-y-4"></div>
+                </section>
+
+                <!-- Bottom Line -->
+                <section class="bg-yellow-50 rounded-lg p-6 border-2 border-yellow-300">
+                    <p class="text-lg font-semibold text-gray-900">💡 <span id="bottomLine"></span></p>
+                </section>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
