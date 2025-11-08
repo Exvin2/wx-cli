@@ -115,8 +115,8 @@ impl WeatherStory {
         rt.block_on(Self::generate_with_ai_async(feature_pack, config))
     }
 
-    /// Async version of AI generation
-    async fn generate_with_ai_async(
+    /// Async version of AI generation (for use in async contexts like web servers)
+    pub async fn generate_with_ai_async(
         feature_pack: &crate::fetchers::FeaturePack,
         config: &crate::config::Config,
     ) -> Result<Self> {

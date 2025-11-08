@@ -98,7 +98,7 @@ async fn get_story(
             .unwrap_or(&params.location);
         story::WeatherStory::synthetic(location_name)
     } else {
-        story::WeatherStory::generate_with_ai(&feature_pack, &state.config)
+        story::WeatherStory::generate_with_ai_async(&feature_pack, &state.config).await
             .unwrap_or_else(|_| {
                 let location_name = feature_pack
                     .location
