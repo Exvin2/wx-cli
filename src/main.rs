@@ -5,6 +5,7 @@ mod cache;
 mod cli;
 mod config;
 mod fetchers;
+mod profile;
 mod render;
 mod story;
 
@@ -111,6 +112,61 @@ enum Commands {
         #[arg(value_name = "SHELL")]
         shell: String,
     },
+
+    /// Manage profiles (API keys, preferences, locations)
+    #[command(subcommand)]
+    Profile(ProfileCommands),
+}
+
+#[derive(Subcommand)]
+enum ProfileCommands {
+    /// Create a new profile
+    Create {
+        /// Profile name
+        name: String,
+    },
+
+    /// List all profiles
+    List,
+
+    /// Switch to a different profile
+    Switch {
+        /// Profile name
+        name: String,
+    },
+
+    /// Show profile details
+    Show {
+        /// Profile name (defaults to current)
+        name: Option<String>,
+    },
+
+    /// Delete a profile
+    Delete {
+        /// Profile name
+        name: String,
+    },
+
+    /// Set a profile value
+    Set {
+        /// Field name (gemini_key, openrouter_key, default_location, units)
+        field: String,
+
+        /// Value to set
+        value: String,
+    },
+
+    /// Add a favorite location
+    AddFavorite {
+        /// Location name
+        location: String,
+    },
+
+    /// Remove a favorite location
+    RemoveFavorite {
+        /// Location name
+        location: String,
+    },
 }
 
 fn main() -> Result<()> {
@@ -159,6 +215,10 @@ fn main() -> Result<()> {
             handle_completions(&shell)?;
         }
 
+        Some(Commands::Profile(profile_cmd)) => {
+            handle_profile_command(profile_cmd)?;
+        }
+
         None => {
             if let Some(question) = cli.question {
                 cli::handle_question(&config, &question, cli.verbose, cli.json)?;
@@ -191,5 +251,144 @@ fn handle_completions(shell: &str) -> Result<()> {
 
     let mut cmd = Cli::command();
     generate(shell, &mut cmd, "wx", &mut io::stdout());
+    Ok(())
+}
+
+fn handle_profile_command(cmd: ProfileCommands) -> Result<()> {
+    use colored::Colorize;
+    use profile::Profile;
+
+    match cmd {
+        ProfileCommands::Create { name } => {
+            Profile::create(&name)?;
+            println!("{} Profile '{}' created", "✓".green(), name.cyan());
+
+            if Profile::list()?.len() == 1 {
+                println!("{} Automatically set as active profile", "✓".green());
+            }
+
+            println!();
+            println!("Set API keys:");
+            println!("  {} wx profile set gemini_key YOUR_KEY", "$".dimmed());
+            println!("  {} wx profile set openrouter_key YOUR_KEY", "$".dimmed());
+        }
+
+        ProfileCommands::List => {
+            let profiles = Profile::list()?;
+            let current = Profile::get_current_profile_name().unwrap_or_default();
+
+            if profiles.is_empty() {
+                println!("No profiles found.");
+                println!("Create one with: {} wx profile create <name>", "$".dimmed());
+                return Ok(());
+            }
+
+            println!();
+            println!("{}", "Profiles:".bold());
+            for name in profiles {
+                let marker = if name == current { "●".green() } else { "○".dimmed() };
+                let display_name = if name == current {
+                    name.cyan().bold()
+                } else {
+                    name.normal()
+                };
+                println!("  {} {}", marker, display_name);
+            }
+            println!();
+            println!("{} = active profile", "●".green());
+        }
+
+        ProfileCommands::Switch { name } => {
+            Profile::set_current_profile(&name)?;
+            println!("{} Switched to profile '{}'", "✓".green(), name.cyan());
+        }
+
+        ProfileCommands::Show { name } => {
+            let profile = if let Some(name) = name {
+                Profile::load(&name)?
+            } else {
+                Profile::load_current()?
+            };
+
+            println!();
+            println!("{}", format!("Profile: {}", profile.name).bold().cyan());
+            println!("{}", "━".repeat(40).cyan());
+
+            if let Some(loc) = &profile.default_location {
+                println!("Default location: {}", loc);
+            } else {
+                println!("Default location: {}", "none".dimmed());
+            }
+
+            println!("Units: {}", profile.units);
+
+            println!();
+            println!("API Keys:");
+            if let Some(_) = &profile.api_keys.gemini {
+                println!("  Gemini: {}", "configured ✓".green());
+            } else {
+                println!("  Gemini: {}", "not set".dimmed());
+            }
+
+            if let Some(_) = &profile.api_keys.openrouter {
+                println!("  OpenRouter: {}", "configured ✓".green());
+            } else {
+                println!("  OpenRouter: {}", "not set".dimmed());
+            }
+
+            if !profile.favorites.is_empty() {
+                println!();
+                println!("Favorites:");
+                for fav in &profile.favorites {
+                    println!("  • {}", fav);
+                }
+            }
+
+            println!();
+            println!("Created: {}", profile.created_at.dimmed());
+        }
+
+        ProfileCommands::Delete { name } => {
+            Profile::delete(&name)?;
+            println!("{} Profile '{}' deleted", "✓".green(), name);
+        }
+
+        ProfileCommands::Set { field, value } => {
+            let current_name = Profile::get_current_profile_name()?;
+            let mut profile = Profile::load(&current_name)?;
+
+            profile.update(&field, &value)?;
+            profile.save()?;
+
+            let display_value = if field.contains("key") {
+                format!("{}...", &value.chars().take(8).collect::<String>())
+            } else {
+                value.clone()
+            };
+
+            println!("{} Set {} = {}", "✓".green(), field.cyan(), display_value);
+        }
+
+        ProfileCommands::AddFavorite { location } => {
+            let current_name = Profile::get_current_profile_name()?;
+            let mut profile = Profile::load(&current_name)?;
+
+            profile.add_favorite(&location);
+            profile.save()?;
+
+            println!("{} Added '{}' to favorites", "✓".green(), location.cyan());
+        }
+
+        ProfileCommands::RemoveFavorite { location } => {
+            let current_name = Profile::get_current_profile_name()?;
+            let mut profile = Profile::load(&current_name)?;
+
+            profile.remove_favorite(&location);
+            profile.save()?;
+
+            println!("{} Removed '{}' from favorites", "✓".green(), location);
+        }
+    }
+
     Ok(())
 }

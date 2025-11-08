@@ -28,13 +28,21 @@ impl Config {
         // Load .env file if present
         dotenv::dotenv().ok();
 
+        // Try to load from active profile first
+        let profile = crate::profile::Profile::load_current().ok();
+
         let config = Config {
-            openrouter_api_key: env::var("OPENROUTER_API_KEY").ok(),
+            openrouter_api_key: profile
+                .as_ref()
+                .and_then(|p| p.api_keys.openrouter.clone())
+                .or_else(|| env::var("OPENROUTER_API_KEY").ok()),
             openrouter_model: env::var("OPENROUTER_MODEL")
                 .unwrap_or_else(|_| "openrouter/auto".to_string()),
-            gemini_api_key: env::var("GEMINI_API_KEY")
-                .or_else(|_| env::var("GOOGLE_API_KEY"))
-                .ok(),
+            gemini_api_key: profile
+                .as_ref()
+                .and_then(|p| p.api_keys.gemini.clone())
+                .or_else(|| env::var("GEMINI_API_KEY").ok())
+                .or_else(|| env::var("GOOGLE_API_KEY").ok()),
             gemini_model: env::var("GEMINI_MODEL")
                 .unwrap_or_else(|_| "gemini-2.0-flash-exp".to_string()),
             temperature: env::var("AI_TEMPERATURE")
@@ -45,13 +53,20 @@ impl Config {
                 .ok()
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(900),
-            units: match env::var("UNITS")
-                .unwrap_or_else(|_| "imperial".to_string())
-                .to_lowercase()
-                .as_str()
-            {
-                "metric" => Units::Metric,
-                _ => Units::Imperial,
+            units: if let Some(ref prof) = profile {
+                match prof.units.as_str() {
+                    "metric" => Units::Metric,
+                    _ => Units::Imperial,
+                }
+            } else {
+                match env::var("UNITS")
+                    .unwrap_or_else(|_| "imperial".to_string())
+                    .to_lowercase()
+                    .as_str()
+                {
+                    "metric" => Units::Metric,
+                    _ => Units::Imperial,
+                }
             },
             offline: offline || env::var("WX_OFFLINE").ok() == Some("1".to_string()),
             debug,
