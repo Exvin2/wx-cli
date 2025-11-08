@@ -104,6 +104,13 @@ enum Commands {
         #[arg(long)]
         severe: bool,
     },
+
+    /// Generate shell completions
+    Completions {
+        /// Shell type (bash, zsh, fish, powershell)
+        #[arg(value_name = "SHELL")]
+        shell: String,
+    },
 }
 
 fn main() -> Result<()> {
@@ -148,6 +155,10 @@ fn main() -> Result<()> {
             cli::handle_world(&config, severe, cli.verbose, cli.json)?;
         }
 
+        Some(Commands::Completions { shell }) => {
+            handle_completions(&shell)?;
+        }
+
         None => {
             if let Some(question) = cli.question {
                 cli::handle_question(&config, &question, cli.verbose, cli.json)?;
@@ -158,5 +169,27 @@ fn main() -> Result<()> {
         }
     }
 
+    Ok(())
+}
+
+fn handle_completions(shell: &str) -> Result<()> {
+    use clap::CommandFactory;
+    use clap_complete::{generate, Shell};
+    use std::io;
+
+    let shell = match shell.to_lowercase().as_str() {
+        "bash" => Shell::Bash,
+        "zsh" => Shell::Zsh,
+        "fish" => Shell::Fish,
+        "powershell" => Shell::PowerShell,
+        _ => {
+            eprintln!("Unsupported shell: {}", shell);
+            eprintln!("Supported: bash, zsh, fish, powershell");
+            std::process::exit(1);
+        }
+    };
+
+    let mut cmd = Cli::command();
+    generate(shell, &mut cmd, "wx", &mut io::stdout());
     Ok(())
 }

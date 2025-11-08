@@ -18,18 +18,69 @@ $ ls -lh wx
 
 ## Installation
 
-### Option 1: Download Binary
+### Quick Install (Recommended)
+
 ```bash
-curl -L https://github.com/Exvin2/wx-cli/releases/latest/download/wx-linux-x64 -o wx
-chmod +x wx
-sudo mv wx /usr/local/bin/
+# Clone the repo
+git clone https://github.com/Exvin2/wx-cli
+cd wx-cli
+
+# Run the installer (builds + installs + completions)
+./install.sh
 ```
 
-### Option 2: Build from Source
+**What it does:**
+- ✅ Builds optimized release binary
+- ✅ Installs to `/usr/local/bin` or `~/.local/bin`
+- ✅ Generates shell completions (bash/zsh/fish)
+- ✅ Shows next steps for PATH and completions
+
+**After install:**
 ```bash
-cargo build --release
-sudo cp target/release/wx /usr/local/bin/
+wx story "your city"  # Works from anywhere!
 ```
+
+### Manual Installation
+
+```bash
+# Build
+cargo build --release
+
+# Install binary
+sudo cp target/release/wx /usr/local/bin/
+
+# Generate shell completions (optional)
+wx completions bash > ~/.bash_completion.d/wx  # For bash
+wx completions zsh > ~/.zsh/completions/_wx    # For zsh
+wx completions fish > ~/.config/fish/completions/wx.fish  # For fish
+```
+
+### Shell Completions
+
+After installation, enable completions:
+
+**Bash:**
+```bash
+source ~/.bash_completion.d/wx
+# Or add to ~/.bashrc for persistence
+```
+
+**Zsh:**
+```bash
+# Add to ~/.zshrc:
+fpath=(~/.zsh/completions $fpath)
+autoload -Uz compinit && compinit
+```
+
+**Fish:**
+```bash
+# Automatically loaded from ~/.config/fish/completions/
+```
+
+Now you get **tab completion** for:
+- Commands: `wx s<TAB>` → `wx story`
+- Options: `wx story --<TAB>` → shows all flags
+- Subcommands: `wx <TAB>` → shows all available commands
 
 ---
 
@@ -106,6 +157,25 @@ WX_OFFLINE=0
 **Note**: Without API keys, wx falls back to synthetic data. The CLI works offline without any configuration - perfect for testing!
 
 See [.env.example](.env.example) for all options.
+
+---
+
+## Uninstall
+
+```bash
+# Remove binary
+sudo rm /usr/local/bin/wx
+# or
+rm ~/.local/bin/wx
+
+# Remove completions (optional)
+rm ~/.bash_completion.d/wx            # bash
+rm ~/.zsh/completions/_wx              # zsh
+rm ~/.config/fish/completions/wx.fish  # fish
+
+# Remove cache (optional)
+rm -rf ~/.cache/wx
+```
 
 ---
 
